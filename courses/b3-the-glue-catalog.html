@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 3 of 8. The session 1 taxi files registered in a mocked Glue Data Catalog: one database, one table of 19 columns, partition key pickup_date, 31 partitions, and why a question about 15 to 21 January needs only 7 of them.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="The Glue Data Catalog - learn aws with phoebe">
+<meta property="og:description" content="Analyst session 3 of 8. Files no catalog describes are invisible to SQL. Register 31 partitions and a one-week question touches 7.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/b3-the-glue-catalog.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Glue Data Catalog - learn aws with phoebe">
+<meta name="twitter:description" content="Analyst session 3 of 8. Tables, partitions, schema versions and catalog prices, built on your laptop with moto.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 3 · The Glue Data Catalog - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Analyst session 3 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Analyst track · Session 3 of 8</div>
+    <h1>The Glue <span class="accent">Data Catalog</span></h1>
+    <p class="sub">Session 1 put the taxi trips in S3 and session 2 decided who may read them. But no SQL engine can query a pile of keys: it needs to be told that these files are a table, what the columns are called, what types they hold and how the folders split the data. That description lives in the Glue Data Catalog. Tonight we write it by hand, one table and 31 partitions, in a mocked account on your laptop, and see why a question about one week touches 7 folders out of 31.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Data analysts and engineers</span>
+      <span class="chip audience">Python, runs locally, no AWS account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Tables, partitions, schema drift</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: register the lake</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Same laptop, same environment, same sample file as analyst session 1. The bucket <code>acme-lake</code> holds the trips three ways, but so far only Python knows what is in them. Tonight's job is metadata: a database called <code>lake</code>, a table called <code>nyc_taxi</code> whose columns come straight from the Parquet file, a location that points at <code>curated/nyc_taxi/</code>, and one partition entry per pickup day. moto stands in for the Glue API, so every call is a real boto3 call and nothing is billed. Session 4 then queries this table and counts the bytes.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = run the code yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A catalog table you wrote as code and can review in a pull request: <code>lake.nyc_taxi</code>, 19 columns, partition key <code>pickup_date</code>, 31 partitions registered. And one number you can defend: a query on 15 to 21 January needs 7 of the 31.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers databases, tables and what the catalog stores</span>
+      <h2>The catalog holds the description, S3 holds the bytes</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">The AWS Glue Developer Guide puts it in one line: the Data Catalog "is a centralized repository that stores metadata about your organization's data sets", and "It acts as an index to the location, schema, and runtime metrics of your data sources." Not one byte of trip data moves into it. A table entry is a few hundred bytes of JSON: column names and types, a Location in S3, the file format, and the partition keys. Engines read that entry first and then go to S3 for exactly the files it points at. A prefix the catalog does not describe is, as far as SQL is concerned, not there.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 350" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Left, four engines that read the Glue Data Catalog: Athena, Redshift Spectrum, Amazon EMR and Lake Formation, each with an arrow into the catalog. Middle, the catalog entry for table lake.nyc_taxi: database lake, an external Parquet table, 19 columns starting vendorid int and tpep_pickup_datetime timestamp, partition key pickup_date of type date, and the highlighted Location s3://acme-lake/curated/nyc_taxi/, with 31 partitions. An arrow runs from the Location to the bucket on the right. In bucket acme-lake, raw/nyc_taxi/2024/01/ and curated/nyc_taxi_flat/ have no catalog entry, so SQL cannot see them; curated/nyc_taxi/ with its 31 day prefixes is registered.">
+        <defs>
+          <filter id="b3aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="17" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b3aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b3aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b3aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b3aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b3aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b3aB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b3aA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .b3aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #0E1F52; }
+          .b3aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b3aH" x="30" y="26">ONE CATALOG ENTRY: THE DESCRIPTION HERE, THE BYTES IN S3</text>
+
+        <g filter="url(#b3aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="60" width="160" height="36" rx="6" transform="rotate(-1.5 110 78)" fill="#FFFFFF"/>
+          <rect x="30" y="108" width="160" height="36" rx="6" transform="rotate(1 110 126)" fill="#FFFFFF"/>
+          <rect x="30" y="156" width="160" height="36" rx="6" transform="rotate(-0.8 110 174)" fill="#FFFFFF"/>
+          <rect x="30" y="204" width="160" height="36" rx="6" transform="rotate(1.4 110 222)" fill="#FFFFFF"/>
+          <path d="M196 78 L232 78 M196 126 L232 126 M196 174 L232 174 M196 222 L232 222" marker-end="url(#b3aAr)"/>
+          <rect x="240" y="60" width="330" height="240" rx="10" transform="rotate(-0.3 405 180)" fill="#FFFFFF"/>
+          <rect x="254" y="116" width="302" height="78" rx="5" fill="#EEF1FA"/>
+          <rect x="254" y="202" width="302" height="28" rx="5" fill="#EEF1FA"/>
+          <rect x="254" y="238" width="302" height="28" rx="5" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M560 252 L612 252" marker-end="url(#b3aAr)"/>
+          <rect x="620" y="60" width="230" height="240" rx="10" transform="rotate(0.4 735 180)" fill="#FFFFFF"/>
+          <rect x="632" y="94" width="206" height="44" rx="5" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="632" y="144" width="206" height="44" rx="5" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="632" y="194" width="206" height="96" rx="5" fill="url(#b3aHc)"/>
+        </g>
+
+        <text class="b3aA" x="30" y="50">ENGINES THAT READ IT</text>
+        <text class="b3aL" x="44" y="83">Athena</text>
+        <text class="b3aL" x="44" y="131">Redshift Spectrum</text>
+        <text class="b3aL" x="44" y="179">Amazon EMR</text>
+        <text class="b3aL" x="44" y="227">Lake Formation</text>
+        <text class="b3aS" x="30" y="264">each one reads the entry</text>
+        <text class="b3aS" x="30" y="280">before it touches S3</text>
+
+        <text class="b3aH" x="256" y="84">TABLE lake.nyc_taxi</text>
+        <text class="b3aS" x="256" y="104">database lake · EXTERNAL_TABLE · parquet</text>
+        <text class="b3aL" x="266" y="134">19 columns</text>
+        <text class="b3aC" x="266" y="152">vendorid  int</text>
+        <text class="b3aC" x="266" y="168">tpep_pickup_datetime  timestamp</text>
+        <text class="b3aS" x="266" y="186">... and 17 more</text>
+        <text class="b3aL" x="266" y="221">partition key: pickup_date (date)</text>
+        <text class="b3aB" x="266" y="257">Location s3://acme-lake/curated/nyc_taxi/</text>
+        <text class="b3aS" x="256" y="288">31 partitions, one per pickup day</text>
+
+        <text class="b3aA" x="634" y="84">BUCKET acme-lake</text>
+        <text class="b3aC" x="644" y="113">raw/nyc_taxi/2024/01/</text>
+        <text class="b3aS" x="644" y="130">no entry: invisible to SQL</text>
+        <text class="b3aC" x="644" y="163">curated/nyc_taxi_flat/</text>
+        <text class="b3aS" x="644" y="180">no entry: invisible to SQL</text>
+        <text class="b3aC" x="644" y="214">curated/nyc_taxi/</text>
+        <text class="b3aS" x="644" y="234">pickup_date=2024-01-01/</text>
+        <text class="b3aS" x="644" y="250">... 31 day prefixes</text>
+        <text class="b3aB" x="644" y="278">registered: SQL sees it</text>
+
+        <text class="b3aN" x="30" y="330">Files with no catalog entry are invisible to SQL, however tidy their keys are.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange Location is the whole link between a table name and the files; two of the three prefixes have none</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Databases, tables, and who reads them<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The guide says the metadata "is organized into databases and tables, similar to a traditional relational database catalog." A database here is just a namespace, <code>lake</code>; it owns no storage and no compute. A table is the entry in the figure. The same guide lists the readers: the catalog "seamlessly integrates with other AWS services, such as AWS Lake Formation, Amazon Athena, Amazon Redshift Spectrum, and Amazon EMR." That is the practical point. Register a table once and four engines see the same columns, the same types and the same files. Register it twice under two names and they see two tables that will drift apart.</p>
+        <p>Lake Formation's own permission model sits on top of these tables; these pages do not teach it, and the access-control concepts behind it live in <a href="https://phoebefu6.github.io/learn-data-access-control-with-phoebe/">learn-data-access-control</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What is inside a table entry<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The build-along writes every field by hand, so read them once. <code>Columns</code> is the list of names and types. <code>Location</code> is the S3 prefix the files live under. <code>InputFormat</code>, <code>OutputFormat</code> and <code>SerdeInfo</code> tell an engine how to read the bytes, here the Hive Parquet classes. <code>PartitionKeys</code> names the columns that live in the folder names rather than inside the files, which is why session 1 wrote <code>pickup_date</code> into the key and left it out of the Parquet data. <code>TableType</code> <code>EXTERNAL_TABLE</code> says the data lives outside the catalog. Each partition entry then carries its own Location, one per day prefix.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Two tables, one set of files.</strong> The finance analysts register <code>curated/orders/</code> as <code>fin.orders</code>; a quarter later the growth team, not finding it, crawls the same prefix into <code>growth.orders_raw</code>. Both point at the same bytes. Then finance changes a column type in its entry, growth's crawler infers a different one, and the two teams' revenue numbers stop agreeing while reading identical files. The repair is not technical: one owner per table, and everyone else reads that entry. The scenario is constructed; the mechanism is the one in the figure.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers partitions in the catalog, crawlers and partition projection</span>
+      <h2>A partition the catalog does not list is a partition no query reads</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Session 1 split the trips into 31 day prefixes. The prefixes alone do nothing for SQL. What makes pruning possible is the catalog's partition list: for each value of <code>pickup_date</code>, a Location. A query that filters on <code>pickup_date</code> asks the catalog which partitions match, and reads only those prefixes. The build-along registers all 31; a question about 15 to 21 January matches 7 of them. The Well-Architected Data Analytics Lens names the payoff of partitioning in BP 10.4: "a full table scan is avoided".</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The catalog's partition list for lake.nyc_taxi drawn as 31 small boxes, one per day of January 2024. Seven boxes, 15 to 21 January, are highlighted: a query filtering on that week needs 7 of 31 partitions. Below, the bytes such a question (pickups per zone, 15 to 21 January, on the session 1 sample) reads from S3: 10,095,345 bytes from the CSV, 760,406 from one Parquet file, and 58,887 from the 7 registered partitions.">
+        <defs>
+          <filter id="b3bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="23" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b3bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b3bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b3bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b3bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b3bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b3bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b3bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b3bH" x="30" y="26">WHERE pickup_date BETWEEN 2024-01-15 AND 2024-01-21</text>
+        <text class="b3bL" x="40" y="56">The catalog's partition list for lake.nyc_taxi, one entry per day</text>
+
+        <g filter="url(#b3bSk)" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="64" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="88" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="112" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="136" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="160" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="184" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="208" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="232" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="256" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="280" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="304" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="328" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="352" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/>
+          <rect x="376" y="70" width="20" height="40" rx="3" fill="#FF9900" stroke="#5C3300"/><rect x="400" y="70" width="20" height="40" rx="3" fill="#FF9900" stroke="#5C3300"/><rect x="424" y="70" width="20" height="40" rx="3" fill="#FF9900" stroke="#5C3300"/><rect x="448" y="70" width="20" height="40" rx="3" fill="#FF9900" stroke="#5C3300"/><rect x="472" y="70" width="20" height="40" rx="3" fill="#FF9900" stroke="#5C3300"/><rect x="496" y="70" width="20" height="40" rx="3" fill="#FF9900" stroke="#5C3300"/><rect x="520" y="70" width="20" height="40" rx="3" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="544" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="568" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="592" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="616" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="640" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="664" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="688" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="712" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="736" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="760" y="70" width="20" height="40" rx="3" fill="#FFFFFF"/>
+          <rect x="40" y="184" width="600" height="18" rx="3" transform="rotate(-0.3 340 193)" fill="url(#b3bHc)"/>
+          <rect x="40" y="212" width="45" height="18" rx="3" fill="#EEF1FA"/>
+          <rect x="40" y="240" width="5" height="18" rx="2" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="b3bS" x="40" y="128">1 Jan</text>
+        <text class="b3bB" x="376" y="128">15-21 Jan: 7 of 31 partitions</text>
+        <text class="b3bS" x="736" y="128">31 Jan</text>
+        <text class="b3bL" x="40" y="172">What a pickups-per-zone question for that week then reads from S3, on the sample:</text>
+        <text class="b3bS" x="652" y="197">CSV 10,095,345 B</text>
+        <text class="b3bS" x="96" y="225">one Parquet file 760,406 B</text>
+        <text class="b3bB" x="56" y="253">7 registered partitions 58,887 B</text>
+
+        <text class="b3bN" x="30" y="284">Bytes from analyst session 1's sample. The pruning only happens because the partitions are registered.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the seven orange entries are the only prefixes the engine opens; bar lengths are to scale</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Crawler or explicit registration<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>There are two ways the partition list gets filled. A <strong>crawler</strong>: "You can populate the Data Catalog using a crawler, which automatically scans your data sources and extracts metadata." It infers columns, types and partitions from what it finds, which is fast to set up and right most of the time. <strong>Explicit registration</strong>: you write the table and its partitions yourself, as the build-along does with <code>create_table</code> and <code>batch_create_partition</code>, or as DDL in Athena. Explicit is slower to write and easy to review: the schema is a file in version control, a changed type shows up in a diff, and nothing changes unless someone merges it. A crawler's guess changes when the data changes.</p>
+        <p>Either way, the ingest job that writes a new day's files must also make sure that day is registered, or the new files sit in S3 unread. Scheduling that pairing belongs to <a href="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/">learn-data-orchestration</a>; the pipelines themselves to <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">learn-data-engineering</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Partition projection, and its one-engine catch<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>For a key as regular as a date, listing every partition is busywork. Athena offers another way, from the Athena User Guide: "In partition projection, Athena calculates partition values and locations using the table properties that you configure directly on your table in AWS Glue." No partition entries are stored; Athena works them out from a rule. The catch is in the next sentence of the same page: "Partition projection is usable only when the table is queried through Athena." Redshift Spectrum or EMR reading that same table do not get the projected partitions. If more than one engine reads the table, register the partitions.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>One catalog, as a governance decision<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Data Analytics Lens, BP 7.1: "Building a central Data Catalog to store, share, and manage metadata across the organization is an integral part of data governance." The reasoning is the Part 1 story in reverse: one entry per dataset means one definition of every column. Treat the lens with its date in mind; its last major update was published December 22, 2023, almost three years ago.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The day that was never there.</strong> An ingest job is rewritten and the new version forgets the step that registers each day's partition. The files keep landing in S3 on time. The dashboard keeps refreshing, without error, and every day since the rewrite is simply missing from it, because the table's partition list stopped growing. Nobody notices until month-end totals come in low. The scenario is constructed; the mechanism is the one in the figure: unregistered is unread.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers catalog prices and schema drift</span>
+      <h2>The catalog is cheap; a stale schema is not</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Glue's prices are small enough to ignore and worth knowing anyway (us-east-1, AWS Price List, 3 October 2026; prices change, so re-verify before relying on them): Data Catalog storage is $1 per 100,000 objects a month beyond the free tier, which is $0.00001 per object; requests are $1 per million; a crawler runs at $0.44 per DPU-hour. The expensive failure is not the bill. It is a schema that no longer matches the files. The guide says the catalog "automatically captures and manages the schema of your data sources, including schema inference, evolution, and versioning." Versioning means the old schema is kept when a new one is recorded. It does not mean anyone reads the difference.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two versions of the lake.nyc_taxi schema side by side. Version 1, from the build-along: vendorid int, tpep_pickup_datetime timestamp, and further down tip_amount. Between them an arrow labelled upstream rename, crawler records version 2. Version 2: the same columns except that tip_amount is now called tip, highlighted. Below, in a red panel, the query SELECT payment_type, avg(tip_amount) FROM lake.nyc_taxi GROUP BY 1, which names a column version 2 no longer has. The rename is constructed.">
+        <defs>
+          <filter id="b3cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="41" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b3cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b3cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b3cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b3cL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b3cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b3cB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b3cC { font: 600 11px ui-monospace, Menlo, monospace; fill: #0E1F52; }
+          .b3cR { font: 800 11px Inter, sans-serif; fill: #991B1B; }
+          .b3cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b3cH" x="30" y="26">TWO VERSIONS OF lake.nyc_taxi, AND YESTERDAY'S QUERY</text>
+
+        <g filter="url(#b3cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="44" width="330" height="176" rx="10" transform="rotate(-0.4 195 132)" fill="#FFFFFF"/>
+          <rect x="46" y="150" width="298" height="26" rx="5" fill="#EEF1FA"/>
+          <path d="M372 110 L508 110" marker-end="url(#b3cAr)"/>
+          <rect x="520" y="44" width="330" height="176" rx="10" transform="rotate(0.5 685 132)" fill="#FFFFFF"/>
+          <rect x="536" y="150" width="298" height="26" rx="5" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="30" y="240" width="820" height="50" rx="8" transform="rotate(-0.2 440 265)" fill="#FEF2F2" stroke="#991B1B"/>
+        </g>
+
+        <text class="b3cL" x="46" y="70">version 1, written by the build-along</text>
+        <text class="b3cC" x="56" y="96">vendorid  int</text>
+        <text class="b3cC" x="56" y="116">tpep_pickup_datetime  timestamp</text>
+        <text class="b3cS" x="56" y="138">...</text>
+        <text class="b3cC" x="56" y="168">tip_amount</text>
+        <text class="b3cS" x="56" y="204">19 columns</text>
+
+        <text class="b3cS" x="380" y="96">upstream rename</text>
+        <text class="b3cS" x="380" y="132">crawler: version 2</text>
+
+        <text class="b3cL" x="536" y="70">version 2, after the rename</text>
+        <text class="b3cC" x="546" y="96">vendorid  int</text>
+        <text class="b3cC" x="546" y="116">tpep_pickup_datetime  timestamp</text>
+        <text class="b3cS" x="546" y="138">...</text>
+        <text class="b3cB" x="546" y="168">tip</text>
+        <text class="b3cS" x="546" y="204">19 columns, one name changed</text>
+
+        <text class="b3cC" x="46" y="261">SELECT payment_type, avg(tip_amount) FROM lake.nyc_taxi GROUP BY 1</text>
+        <text class="b3cR" x="46" y="280">names a column version 2 no longer has: the dashboard built on it breaks</text>
+
+        <text class="b3cN" x="30" y="312">Constructed rename. The catalog keeps both versions, so the diff is there to read if someone asks.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - one changed name in the orange row; every query and dashboard that used the old name is now wrong</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Read the types the script registered<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The build-along's real output prints the first three columns as the catalog stored them: <code>('vendorid', 'int')</code>, <code>('tpep_pickup_datetime', 'timestamp')</code>, <code>('tpep_dropoff_datetime', 'timestamp')</code>. Two things to notice. The timestamps are timestamps, not strings, because the types came from the Parquet file through DuckDB's <code>DESCRIBE</code>, so a date filter compares dates rather than text. And the TLC's own column is spelled <code>VendorID</code>; the script lower-cases every name, following the Hive and Glue convention of lower-case column names, so that SQL written against the table never depends on the capitalisation an upstream system happened to choose. That is one small schema decision made on purpose. A crawler would have made it for you, its way.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the catalog costs at scale<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A modelled example, your numbers will differ: 100 tables, each partitioned by day and kept for a year, is 36,500 partition entries. Beyond the free tier, at $0.00001 per object, that is about $0.37 a month. A million catalog requests, every engine asking for partition lists all month, is $1. The free tier's size is on AWS's Glue pricing page; these pages do not quote it, so check it there. The one Glue line that can grow is the crawler, billed at $0.44 per DPU-hour (us-east-1, AWS Price List, 3 October 2026; re-verify before relying on it): how many DPU-hours a crawl takes depends on how many files it has to open, so a crawler pointed at a small-files table from session 1's warning is a crawler that runs long.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Renamed on a Friday.</strong> The source team renames <code>tip_amount</code> to <code>tip</code> in their export, a tidy change on their side. The weekend crawler records a new schema version. On Monday the tips dashboard errors, and the finance extract that selected columns by position quietly fills a field with the wrong numbers. The schema history shows exactly when it changed; nobody was watching it. The usual repair is a contract: the producer announces schema changes, and the table is registered explicitly so a rename has to pass review. The scenario is constructed; the versioning it relies on is the documented one.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Register the lake in a catalog on your laptop</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Five steps, one Python file, a few seconds of run time. The script reads the schema from the sample file, creates a database and a table in a mocked Glue Data Catalog, registers one partition per pickup day, and asks the catalog which partitions a one-week question needs. The output below is pasted from a real run of exactly this code.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along drawn left to right. The sample Parquet file of 100,000 trips goes into DuckDB DESCRIBE, which yields 19 columns with Glue types and lower-cased names. Three boto3 calls follow: create_database lake, create_table nyc_taxi, and batch_create_partition with 31 entries. They land in moto, Glue on the laptop, where get_partitions answers that 15 to 21 January needs 7 of 31.">
+        <defs>
+          <filter id="b3dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b3dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b3dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b3dL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b3dS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b3dB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b3dW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .b3dN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#b3dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="60" width="140" height="70" rx="8" transform="rotate(-1 100 95)" fill="url(#b3dHc)"/>
+          <rect x="200" y="60" width="140" height="70" rx="8" transform="rotate(0.8 270 95)" fill="#183177" stroke="#183177"/>
+          <rect x="370" y="30" width="230" height="36" rx="6" fill="#FFFFFF"/>
+          <rect x="370" y="78" width="230" height="36" rx="6" fill="#FFFFFF"/>
+          <rect x="370" y="126" width="230" height="36" rx="6" fill="#FFFFFF"/>
+          <rect x="640" y="40" width="210" height="120" rx="12" transform="rotate(0.5 745 100)" fill="#EEF1FA"/>
+          <rect x="656" y="118" width="178" height="28" rx="6" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M174 95 L192 95" marker-end="url(#b3dAr)"/>
+          <path d="M344 88 L362 50 M344 95 L362 96 M344 102 L362 142" marker-end="url(#b3dAr)"/>
+          <path d="M604 96 L632 96" marker-end="url(#b3dAr)"/>
+        </g>
+
+        <text class="b3dL" x="44" y="90">sample.parquet</text>
+        <text class="b3dS" x="44" y="108">100,000 trips</text>
+        <text class="b3dW" x="214" y="90">DuckDB DESCRIBE</text>
+        <text class="b3dW" x="214" y="110">19 columns</text>
+        <text class="b3dL" x="382" y="53">create_database lake</text>
+        <text class="b3dL" x="382" y="101">create_table nyc_taxi</text>
+        <text class="b3dL" x="382" y="149">batch_create_partition x 31</text>
+        <text class="b3dL" x="656" y="66">moto: Glue on your laptop</text>
+        <text class="b3dS" x="656" y="86">get_partitions lists them</text>
+        <text class="b3dS" x="656" y="104">nothing billed</text>
+        <text class="b3dB" x="668" y="137">15-21 Jan: 7 of 31</text>
+
+        <text class="b3dN" x="30" y="206">Schema from the file, table and partitions as code, one question for the catalog. Every number below is printed by it.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the table entry is written by code you can review, not inferred by a crawler</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Reuse the environment and the sample from analyst session 1.</strong> Same folder, same <code>.venv</code>, same pinned versions; nothing new to install. The script reads <code>yellow_tripdata_2024-01_sample.parquet</code> from the current folder, so run it where session 1 downloaded it. If you are starting fresh, run analyst session 1's step 1 first.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · setup (verified 3 October 2026)</span>. .venv/bin/activate
+ls yellow_tripdata_2024-01_sample.parquet        # 2,776,217 bytes
+python -c "import moto, boto3, duckdb; print(moto.__version__, boto3.__version__, duckdb.__version__)"   # expect 5.2.3 1.43.108 1.5.6</div>
+      </div>
+      <div class="step">
+        <p><strong>Read the schema from the file, not from memory.</strong> DuckDB's <code>DESCRIBE</code> returns each column's name and type without reading the data. A small map turns DuckDB types into the Hive type names the catalog uses, and every name is lower-cased. The last line lists the distinct pickup days, which become the partitions.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · b3_catalog.py, part 1</span># Analyst session 3 - the Glue Data Catalog, run locally against moto
+import os, boto3, duckdb
+from moto import mock_aws
+
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+SAMPLE = "yellow_tripdata_2024-01_sample.parquet"
+con = duckdb.connect()
+schema = con.execute(f"DESCRIBE SELECT * FROM '{SAMPLE}'").fetchall()
+TYPES = {"INTEGER": "int", "BIGINT": "bigint", "DOUBLE": "double", "VARCHAR": "string", "TIMESTAMP": "timestamp"}
+columns = [{"Name": n.lower(), "Type": TYPES[t]} for n, t, *_ in schema]
+days = [r[0] for r in con.execute(f"SELECT DISTINCT CAST(tpep_pickup_datetime AS DATE)::VARCHAR FROM '{SAMPLE}' ORDER BY 1").fetchall()]</div>
+      </div>
+      <div class="step">
+        <p><strong>Create the database and the table.</strong> This is the entry from Part 1, field by field: the columns, the Location under <code>curated/nyc_taxi/</code>, the Parquet reader classes, and <code>pickup_date</code> as a partition key of type <code>date</code>. Nothing here touches S3; the catalog only stores the pointer.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · b3_catalog.py, part 2</span>with mock_aws():
+    glue = boto3.client("glue")
+    glue.create_database(DatabaseInput={"Name": "lake"})
+    glue.create_table(DatabaseName="lake", TableInput={
+        "Name": "nyc_taxi",
+        "StorageDescriptor": {
+            "Columns": columns,
+            "Location": "s3://acme-lake/curated/nyc_taxi/",
+            "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+            "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+            "SerdeInfo": {"SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"},
+        },
+        "PartitionKeys": [{"Name": "pickup_date", "Type": "date"}],
+        "TableType": "EXTERNAL_TABLE",
+        "Parameters": {"classification": "parquet"},
+    })</div>
+      </div>
+      <div class="step">
+        <p><strong>Register one partition per day, then ask the catalog.</strong> <code>batch_create_partition</code> writes all 31 entries in one call, each with its own day prefix. <code>get_table</code> and <code>get_partitions</code> read them back the way an engine would, and the last line does the pruning by hand: which partition values fall in 15 to 21 January.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · b3_catalog.py, part 3</span>    glue.batch_create_partition(DatabaseName="lake", TableName="nyc_taxi", PartitionInputList=[
+        {"Values": [d], "StorageDescriptor": {"Location": f"s3://acme-lake/curated/nyc_taxi/pickup_date={d}/"}} for d in days])
+    t = glue.get_table(DatabaseName="lake", Name="nyc_taxi")["Table"]
+    print("table:", t["DatabaseName"] + "." + t["Name"], "|", len(t["StorageDescriptor"]["Columns"]), "columns |",
+          "partition key:", t["PartitionKeys"][0]["Name"], "|", t["StorageDescriptor"]["Location"])
+    print("first three columns:", [(c["Name"], c["Type"]) for c in t["StorageDescriptor"]["Columns"][:3]])
+    parts = glue.get_partitions(DatabaseName="lake", TableName="nyc_taxi")["Partitions"]
+    print("partitions registered:", len(parts), "| first:", parts[0]["StorageDescriptor"]["Location"] if parts else None)
+    week = [p for p in parts if "2024-01-15" &lt;= p["Values"][0] &lt;= "2024-01-21"]
+    print("a query on 15-21 January needs", len(week), "of", len(parts), "partitions")</div>
+      </div>
+      <div class="step">
+        <p><strong>Run it and compare with this real output.</strong> Look at line 2: <code>vendorid</code>, lower-case, although the TLC file spells it <code>VendorID</code>. That is the script's <code>n.lower()</code> applying the Hive and Glue lower-case convention, and it is the name every query in session 4 uses. moto is a mock: it stores what you send and answers the API, but it is not AWS's catalog, so treat the output as proof of the calls, not of how a real engine plans a query.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · python b3_catalog.py (real output)</span>table: lake.nyc_taxi | 19 columns | partition key: pickup_date | s3://acme-lake/curated/nyc_taxi/
+first three columns: [('vendorid', 'int'), ('tpep_pickup_datetime', 'timestamp'), ('tpep_dropoff_datetime', 'timestamp')]
+partitions registered: 31 | first: s3://acme-lake/curated/nyc_taxi/pickup_date=2024-01-01/
+a query on 15-21 January needs 7 of 31 partitions</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>On a real Free Tier account (optional).</strong> Needs an AWS account: AWS says most new customers are not asked for a card on the Free plan, some are, and a Paid plan needs one. Remove the <code>with mock_aws():</code> line and dedent, change <code>acme-lake</code> to the bucket you created in session 1, and run with credentials from <code>aws configure</code>. The Glue Data Catalog has a free tier; beyond it, storage is $1 per 100,000 objects a month and requests are $1 per million (us-east-1, AWS Price List, 3 October 2026; prices change, so re-verify before relying on them). This run writes one database, one table and 31 partitions and makes a handful of requests, so even past the free tier it is a fraction of a cent. No crawler runs, so there is no DPU-hour charge. Delete it afterwards with <code>aws glue delete-table --database-name lake --name nyc_taxi</code>, then <code>aws glue delete-database --name lake</code>.</p>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The catalog nobody owns</span>lake.nyc_taxi            -&gt; s3://acme-lake/curated/nyc_taxi/
+lake.nyc_taxi_v2         -&gt; s3://acme-lake/curated/nyc_taxi/
+tmp.taxi_crawl_final     -&gt; s3://acme-lake/curated/nyc_taxi/   (crawler, schedule unknown)</div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 4</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Print the whole schema.</strong> Change <code>[:3]</code> to show all 19 columns and their types. Which columns would you have guessed wrong if you had typed the schema from memory?</li>
+      <li><strong>Forget a day.</strong> Drop <code>2024-01-17</code> from <code>days</code> before <code>batch_create_partition</code> and rerun. How many partitions does the week question need now, and what would a real query silently leave out?</li>
+      <li><strong>Simulate the rename.</strong> After <code>create_table</code>, call <code>glue.update_table</code> with <code>tip_amount</code> renamed to <code>tip</code>, then <code>glue.get_table_versions</code>. Write down what the catalog kept and what it did not warn anyone about.</li>
+      <li><strong>Count your catalog at work.</strong> Pick one database your team uses: how many tables, how many point at the same Location, and who registered each one, a person or a crawler?</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 3 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · After the build-along, what does the catalog hold for <code>lake.nyc_taxi</code>?</p>
+      <button class="qopt" type="button">A · A copy of the 100,000 trips in a faster format</button>
+      <button class="qopt" type="button">B · The Parquet files themselves, moved out of S3</button>
+      <button class="qopt" type="button">C · Metadata only: 19 column names and types, the S3 Location, the format, the partition key and 31 partition locations; the bytes stay in S3</button>
+      <button class="qopt" type="button">D · A cached result for every query run so far</button>
+      <p class="qwhy">The guide calls the catalog "an index to the location, schema, and runtime metrics" of your data. It describes the files and points at them; engines then read S3 directly.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Files for 22 January land in <code>curated/nyc_taxi/pickup_date=2024-01-22/</code>, but nobody registers the partition. What does a query for that day return?</p>
+      <button class="qopt" type="button">A · An error naming the missing partition</button>
+      <button class="qopt" type="button">B · The right rows, because the engine lists S3 anyway</button>
+      <button class="qopt" type="button">C · Rows from 21 January instead</button>
+      <button class="qopt" type="button">D · Nothing for that day: the engine reads the partitions the catalog lists, and that one is not listed</button>
+      <p class="qwhy">With registered partitions, the partition list is what the engine prunes against. Unregistered is unread, and it fails silently, which is why the ingest job and the registration step belong together.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3 · A table uses partition projection instead of registered partitions. Redshift Spectrum queries it too. What happens?</p>
+      <button class="qopt" type="button">A · Spectrum computes the same partitions from the table properties</button>
+      <button class="qopt" type="button">B · Spectrum does not get the projected partitions: AWS says projection "is usable only when the table is queried through Athena"</button>
+      <button class="qopt" type="button">C · Glue copies the projected partitions into the catalog for other engines</button>
+      <button class="qopt" type="button">D · Projection doubles the catalog storage bill</button>
+      <p class="qwhy">Athena calculates partition values and locations from the table properties at query time; nothing is stored for other engines to read. A table read by more than one engine needs registered partitions.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The table, 19 columns, 31 partitions, 7 of 31</span><span class="note">Measured: b3_catalog.py run with moto 5.2.3, boto3 1.43.108 and DuckDB 1.5.6 on the seeded sample; the code shown is the code that printed them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Bytes for the one-week question</span><span class="note">Measured in analyst session 1's layouts: 10,095,345, 760,406 and 58,887 bytes</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">What the catalog stores, crawlers, schema versioning, its readers</span><span class="note">AWS Glue Developer Guide, "AWS Glue Data Catalog", read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Partition projection and its Athena-only limit</span><span class="note">Amazon Athena User Guide, "Partitioning data", partition projection, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">BP 7.1 central catalog, BP 10.4 partitioning</span><span class="note">AWS Well-Architected Data Analytics Lens (December 22, 2023)</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Glue catalog, request and crawler prices; the Free plan card wording</span><span class="note">AWS Price List bulk API, us-east-1, retrieved 2026-10-03; AWS Free Tier FAQs, read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The 36,500-partition cost example</span><span class="note">Modelled from the Price List rate; the free tier's size is not quoted here</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The three real-world stories and the tip_amount rename</span><span class="note">Constructed; each mechanism is the documented one</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 3 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Description, not data</b><span>The catalog holds columns, types, Location, format and partitions. The bytes stay in S3.</span></div>
+      <div class="cheat-item"><b>No entry, no SQL</b><span>Athena, Redshift Spectrum, EMR and Lake Formation read the catalog first. Undescribed files are invisible.</span></div>
+      <div class="cheat-item"><b>Registered is read</b><span>31 partitions listed; a 15-21 January question opens 7. An unregistered day is silently missing.</span></div>
+      <div class="cheat-item"><b>Crawler or code</b><span>Crawlers infer and drift with the data; explicit registration is slower and reviewable.</span></div>
+      <div class="cheat-item"><b>Projection is Athena-only</b><span>Computed partitions help Athena; any other engine needs registered ones.</span></div>
+      <div class="cheat-item"><b>Cheap metadata</b><span>$1 per 100,000 objects a month past the free tier, $1 per million requests, crawler $0.44 per DPU-hour (us-east-1, 3 October 2026).</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>The table exists, so SQL can find the files. Session 4 asks it questions and reads the meter: bytes scanned per query on CSV, Parquet and the partitioned layout, Athena's $5.00 per TB, and the 10 MB minimum that every query on a sample this small actually pays.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 3 of 8 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b2-iam-policies-as-code.html">← Prev: IAM policies as code</a> &nbsp;·&nbsp; <a href="b4-athena-pay-per-byte.html">Next: Athena: pay per byte scanned →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 4 of 6. Compute or serverless on AWS: the four meters an engine runs on, Lambda's limits as a design constraint, and where a function stops being cheaper than a container that is always on.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Compute or serverless - learn aws with phoebe">
+<meta property="og:description" content="Leader session 4 of 6. One file a day on Lambda: $0.01 a month. One a minute: $14.41. A small container always on: $36.04. Pick the engine by the meter the job runs on.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/a4-compute-or-serverless.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Compute or serverless - learn aws with phoebe">
+<meta name="twitter:description" content="Leader session 4 of 6. Four meters, Lambda's limit box, and the crossover between a function and a container.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 4 · Compute or serverless - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Leader session 4 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Leader track · Session 4 of 6</div>
+    <h1>Compute or <span class="accent">serverless</span></h1>
+    <p class="sub">Every engine on AWS runs on a meter. Some meters tick only while a query reads bytes, some only while your code is running, and some tick every hour of every day whether or not work arrives. Tonight we read those meters the way a data leader needs to: what each one counts, where Lambda's hard walls sit, and the point at which a function that costs a cent a month becomes dearer than a small container left on all the time.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Data and AI leaders, managers, architects</span>
+      <span class="chip audience">No code, no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Four meters, the limit box, the crossover</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: five jobs, five meters</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 1 drew the platform as storage, a catalog, engines and identity around them. Session 2 built the storage and session 3 the identity ring. This session fills the engines row. One boundary first: how to design the pipelines these engines run belongs to <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">learn data engineering</a>, and how to schedule them to <a href="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/">learn data orchestration</a>. What follows is the choice of engine read as a bill and as a set of limits. Analyst session 5 runs a real Lambda handler against a local mock and computes the cost numbers you will see in Part 3.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A one-page sheet of five of your team's jobs, each classified by how long it runs, how often, how much memory it needs and which meter it should run on, with the engine that follows. Plus three numbers for the next "should we just run a server?" conversation: the same 20-second job at 1 GB costs $0.01 a month on Lambda once a day, $14.41 once a minute, against $36.04 for a small Fargate container always on (modelled workloads; us-east-1, AWS Price List, 3 October 2026; re-verify prices before relying on them).</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the meter each engine runs on</span>
+      <h2>Four meters, one day</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Four engines carry most of a data team's work on AWS, and each one bills by a different unit. Athena bills the bytes a query reads. Lambda bills the time your code runs, multiplied by the memory you gave it. Fargate bills a container's vCPU and memory for every hour it exists. Redshift Serverless bills warehouse capacity per second while queries run, and nothing for compute when they do not. Put all four against the same day and the difference stops being abstract.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 332" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One constructed day from midnight to midnight, four lanes. Athena, 5 dollars per TB scanned, has five thin ticks in office hours, one per query, with a 10 MB minimum per query. Lambda, 0.0000166667 dollars per GB-second, has six thin spikes in the afternoon and evening, one per file handled, billed per millisecond. Fargate, 0.04048 dollars per vCPU-hour, is highlighted: one solid bar across all 24 hours, billed whether or not work arrives. Redshift Serverless, 0.375 dollars per RPU-hour, has two short blocks when queries run and one very thin sliver for a 5-second query that bills 60 seconds; nothing in between.">
+        <defs>
+          <filter id="a4aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="83" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a4aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a4aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a4aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a4aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a4aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a4aB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a4aA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a4aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a4aH" x="30" y="26">FOUR METERS AGAINST THE SAME DAY: WHEN EACH ONE IS RUNNING</text>
+
+        <g filter="url(#a4aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="200" y="52" width="640" height="36" rx="6" transform="rotate(-0.3 520 70)" fill="#FFFFFF"/>
+          <rect x="200" y="112" width="640" height="36" rx="6" transform="rotate(0.3 520 130)" fill="#FFFFFF"/>
+          <rect x="200" y="172" width="640" height="36" rx="6" transform="rotate(-0.2 520 190)" fill="#FFFFFF"/>
+          <rect x="200" y="232" width="640" height="36" rx="6" transform="rotate(0.2 520 250)" fill="#FFFFFF"/>
+
+          <rect x="443" y="58" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="457" y="58" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="492" y="58" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="581" y="58" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="628" y="58" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+
+          <rect x="546" y="118" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="599" y="118" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="652" y="118" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="706" y="118" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="759" y="118" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+          <rect x="812" y="118" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+
+          <rect x="205" y="178" width="630" height="24" rx="4" transform="rotate(-0.2 520 190)" fill="#FF9900" stroke="#5C3300"/>
+
+          <rect x="520" y="238" width="40" height="24" rx="3" fill="url(#a4aHc)"/>
+          <rect x="627" y="238" width="27" height="24" rx="3" fill="url(#a4aHc)"/>
+          <rect x="760" y="238" width="4" height="24" fill="#183177" stroke="#183177" stroke-width="1"/>
+        </g>
+
+        <text class="a4aL" x="30" y="64">Athena</text>
+        <text class="a4aS" x="30" y="80">$5.00 per TB scanned</text>
+        <text class="a4aL" x="30" y="124">Lambda</text>
+        <text class="a4aS" x="30" y="140">$0.0000166667 per GB-s</text>
+        <text class="a4aL" x="30" y="184">Fargate</text>
+        <text class="a4aS" x="30" y="200">$0.04048 per vCPU-hour</text>
+        <text class="a4aL" x="30" y="244">Redshift Serverless</text>
+        <text class="a4aS" x="30" y="260">$0.375 per RPU-hour</text>
+
+        <text class="a4aS" x="212" y="74">per query; 10 MB minimum</text>
+        <text class="a4aS" x="212" y="134">per 1 ms while a file is handled</text>
+        <text class="a4aB" x="216" y="194">always on: billed every hour, work or no work</text>
+        <text class="a4aS" x="212" y="254">per second; 60 s minimum; idle is free</text>
+
+        <text class="a4aA" x="200" y="288" text-anchor="middle">00:00</text>
+        <text class="a4aA" x="360" y="288" text-anchor="middle">06:00</text>
+        <text class="a4aA" x="520" y="288" text-anchor="middle">12:00</text>
+        <text class="a4aA" x="680" y="288" text-anchor="middle">18:00</text>
+        <text class="a4aA" x="836" y="288" text-anchor="end">24:00</text>
+
+        <text class="a4aN" x="30" y="318">Three meters stop when the work stops; the always-on one does not. The day is constructed.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange lane is the only meter that runs while nothing happens (prices: us-east-1, AWS Price List, 3 October 2026)</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Four meters, four units<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Athena: bytes.</strong> $5.00 per TB scanned. Session 2 showed why layout matters, and session 5 turns it into a monthly bill: a query on a badly laid out table reads everything, every time.</p>
+        <p><strong>Lambda: time times memory, plus requests.</strong> $0.0000166667 per GB-second for the first tier, plus $0.20 per million requests. The pricing page is precise about the clock: duration "is calculated from the time your code begins executing until it returns or otherwise terminates, rounded up to the nearest 1ms".</p>
+        <p><strong>Fargate: hours of existence.</strong> $0.04048 per vCPU-hour and $0.004445 per GB-hour. A container that is running is billing, whether it is transforming a file or waiting for one.</p>
+        <p><strong>Redshift Serverless: capacity while queries run.</strong> $0.375 per RPU-hour, where one RPU "provides 16 GB of memory". The billing page says "When no queries are running, you aren't billed for compute capacity." All four prices are us-east-1, AWS Price List, 3 October 2026, and must be re-verified before you rely on them.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The minimums that shape small jobs<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Every meter has a smallest unit, and for small, frequent work the smallest unit is the bill. Athena charges "for the number of bytes scanned per query, rounded up to the nearest megabyte, with a 10 MB minimum per query." On the 100,000-row taxi sample used by the analyst track, every query is smaller than that, so every query bills the minimum: $0.000048 (us-east-1, AWS Price List, 3 October 2026).</p>
+        <p>Redshift Serverless bills "in RPU-hours on a per-second basis, with a 60-second minimum charge." Analyst session 6 models what that means: a 5-second query on an idle 8 RPU warehouse bills $0.0500, not the $0.0042 its five seconds would suggest (modelled; same Price List, re-verify before relying on it). Lambda's unit is 1 ms, so it has the least rounding of the four. Fargate has none of these problems and one bigger one: it never stops on its own.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Storage and the small print<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Storage is its own meter and runs all month. Redshift's billing page: "Storage is billed by GB / month. Storage billing is separate from billing for compute capacity." Managed storage is $0.024 per GB-month (us-east-1, AWS Price List, 3 October 2026; re-verify). The lake itself bills S3 storage, which session 2 priced.</p>
+        <p>Two sentences from the same page belong in any review of a warehouse bill. "Maintaining open connection pools can generate costs even when no actual user workloads are running." And "If you run a query and cancel it before it finishes, you are still billed for the time the query ran." Athena has a matching rule: no charge for DDL or failed queries, but cancelled queries are billed for the data they scanned. "Idle is free" is true only when the engine can see that it is idle.</p>
+        <p>EC2, AWS's virtual machines, is a fifth meter (instance hours) and the base under many managed services; instance families, networking, Savings Plans and Reserved Instances are not taught on these pages.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The container that waited all day.</strong> A team needs one partner file a day turned into Parquet. The engineer who builds it knows containers, so it ships as a small Fargate service, 1 vCPU and 2 GB, that polls the bucket every minute. It works for a year. At the annual cost review someone notices it has been billing every hour of every day to do about twenty seconds of work: $36.04 a month for a job that, run as a Lambda function on the same file, models at $0.01 (modelled; us-east-1, AWS Price List, 3 October 2026; re-verify). The money is small. The habit is not: every always-on service in the estate deserves the question "how much of the day is it working?" Constructed, from a common pattern.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers Lambda's limits as a design constraint</span>
+      <h2>The limit box</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Lambda is cheap for short work because AWS runs it inside fixed walls. A job either fits inside those walls or it does not, and no amount of tuning moves a wall. The leader's question is not "is serverless good?" but "does this job fit the box today, and will it still fit when the data doubles?" All the walls below come from AWS's "Lambda quotas" page, read on 3 October 2026; quotas change, so re-read it before a design review.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 378" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A chart of job duration from 0 to 30 minutes against memory. A tinted box marks where Lambda can run a job: up to 900 seconds, which is 15 minutes, and from 128 MB to 10,240 MB of memory, with a line at 1,769 MB where a function gets one vCPU. A file-to-Parquet job at 20 seconds and 1 GB sits inside the box. A nightly job that ran 9 minutes last year has grown to 22 minutes and is highlighted outside the right wall. A scoring job that needs 14 GB sits above the top wall. A side panel lists the other walls: payload 6 MB synchronous and 1 MB asynchronous, package 50 MB zipped and 250 MB unzipped, container image 10 GB, temporary storage up to 10,240 MB, 1,000 concurrent executions by default with new accounts starting lower.">
+        <defs>
+          <filter id="a4bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="89" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a4bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a4bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a4bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a4bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a4bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a4bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a4bA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a4bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a4bH" x="30" y="26">LAMBDA'S LIMIT BOX: A JOB FITS INSIDE IT, OR IT NEEDS ANOTHER ENGINE</text>
+
+        <g filter="url(#a4bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="100" y="150" width="230" height="148" rx="4" transform="rotate(-0.4 215 224)" fill="#EEF1FA" stroke="#183177"/>
+          <path d="M100 274 L330 274" stroke="#B9C4E6"/>
+          <path d="M100 300 L572 300" marker-end="url(#a4bAr)"/>
+          <path d="M100 300 L100 52" marker-end="url(#a4bAr)"/>
+          <circle cx="106" cy="286" r="7" fill="#183177" stroke="#183177"/>
+          <circle cx="238" cy="210" r="8" fill="#FFFFFF"/>
+          <path d="M248 210 L424 210" marker-end="url(#a4bAr)"/>
+          <circle cx="437" cy="210" r="9" fill="#FF9900" stroke="#5C3300"/>
+          <circle cx="161" cy="90" r="8" fill="url(#a4bHc)"/>
+          <rect x="604" y="56" width="246" height="244" rx="8" transform="rotate(0.5 727 178)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="a4bA" x="92" y="64" text-anchor="end">memory</text>
+        <text class="a4bS" x="92" y="154" text-anchor="end">10,240 MB</text>
+        <text class="a4bS" x="92" y="278" text-anchor="end">1,769 MB</text>
+        <text class="a4bS" x="92" y="302" text-anchor="end">128 MB</text>
+
+        <text class="a4bL" x="112" y="170">Lambda fits here</text>
+        <text class="a4bS" x="200" y="268">1 vCPU at 1,769 MB</text>
+        <text class="a4bS" x="120" y="292">file to Parquet, 20 s, 1 GB</text>
+        <text class="a4bS" x="196" y="194">was 9 min last year</text>
+        <text class="a4bB" x="452" y="214">nightly job: 22 min</text>
+        <text class="a4bS" x="176" y="94">scoring job: needs 14 GB</text>
+
+        <text class="a4bA" x="100" y="318" text-anchor="middle">0</text>
+        <text class="a4bA" x="330" y="318" text-anchor="middle">15 min (900 s)</text>
+        <text class="a4bA" x="560" y="318" text-anchor="middle">30 min</text>
+        <text class="a4bA" x="100" y="338">duration of one run</text>
+
+        <text class="a4bH" x="620" y="82">THE OTHER WALLS</text>
+        <text class="a4bS" x="620" y="108">Payload: 6 MB sync, 1 MB async</text>
+        <text class="a4bS" x="620" y="134">Package: 50 MB zip, 250 MB unzipped</text>
+        <text class="a4bS" x="620" y="160">Container image: 10 GB</text>
+        <text class="a4bS" x="620" y="186">/tmp: up to 10,240 MB</text>
+        <text class="a4bS" x="620" y="212">Concurrency: 1,000 by default</text>
+        <text class="a4bS" x="620" y="238">New accounts start lower</text>
+        <text class="a4bS" x="620" y="264">Billed per 1 ms</text>
+        <text class="a4bS" x="620" y="286">Walls do not move with tuning</text>
+
+        <text class="a4bN" x="30" y="364">Jobs are constructed; the walls are from AWS's "Lambda quotas" page, read 3 October 2026.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange job did not change engines; its data grew until it crossed the 900-second wall</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The 900-second wall<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The quota reads "900 seconds (15 minutes)." When a run reaches it, Lambda stops the run. It is not a soft target and it cannot be raised. That makes duration the first thing to ask about any job proposed for Lambda, and the second thing is its trend: a job that takes 9 minutes on this year's volume is a job that will take longer on next year's.</p>
+        <p>Jobs past the wall have three honest options: split the work into pieces that each fit (one file per run instead of one night per run), move it to a container that can run as long as it needs, or move the heavy part into a query engine that is built for it. Which one is right depends on the pipeline design, and that design is taught in <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">learn data engineering</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Memory buys CPU<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Lambda memory runs from "128 MB to 10,240 MB, in 1-MB increments", and CPU comes with it: "At 1,769 MB, a function has the equivalent of one vCPU." A function given 512 MB to save money gets a fraction of a CPU, runs longer, and may cost the same or more, because the meter is memory times time. Scratch disk is separate: <code>/tmp</code> is configurable "Between 512 MB and 10,240 MB".</p>
+        <p>The leader's version: a job that needs more than 10,240 MB of memory, such as a scoring model that loads 14 GB, does not fit however short it is. That is a container's or a dedicated service's job, and GPU or inference infrastructure belongs to <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/">learn AI infra</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Payloads, packages, concurrency and the free tier<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Payloads.</strong> "6 MB each for request and response (synchronous)", "1 MB (asynchronous)", and "200 MB for each streamed response". The asynchronous figure is 1 MB; older articles and diagrams still say 256 KB, which is out of date. Either way the norm holds: pass a pointer to the data (an S3 key), never the data itself.</p>
+        <p><strong>Packages.</strong> 50 MB zipped and 250 MB unzipped for a zip deployment including layers, or a container image of up to 10 GB. Heavy libraries are the usual reason a team moves to the image route.</p>
+        <p><strong>Concurrency.</strong> 1,000 concurrent executions by default, raisable, with a caveat worth checking on a fresh account: "New AWS accounts have reduced concurrency and memory quotas". A backfill of 10,000 files that all land at once queues against that ceiling.</p>
+        <p><strong>Free tier.</strong> "The free tier includes one million requests and 400,000 GB-seconds per month." One more caution from the analyst track: in analyst session 5 a local mock, moto, accepted a 901-second timeout that real Lambda rejects. A mock is not a quota check; the quotas page is.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The nightly job that grew past 15 minutes.</strong> A nightly reconciliation was written as one Lambda function in its first month, when it took four minutes. Volume grew, nobody watched the duration, and one night it hit 900 seconds and stopped halfway. The morning dashboard showed yesterday's numbers as today's, and the first person to notice was a regional manager. The fix was not more memory; it was splitting the run into one invocation per region, each well inside the wall, plus an alarm on duration at 600 seconds. Constructed, from a common pattern.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers the crossover between a function and a container</span>
+      <h2>Where the lines cross</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Analyst session 5 takes one real workload shape, a 20-second run at 1 GB of memory, and prices it on two engines with real us-east-1 prices from the AWS Price List on 3 October 2026. The workloads are modelled; the prices are not. Lambda's cost rises with every run. A Fargate container sized at 1 vCPU and 2 GB costs the same every month whether it runs once or all the time. Somewhere the two lines cross.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 392" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Monthly cost against Lambda invocations a month, from 0 to 150,000. A flat line marks Fargate, 1 vCPU and 2 GB always on, at 36.04 dollars a month. A rising line marks Lambda at 20 seconds and 1 GB per run. One file a day costs 0.01 dollars a month, near zero. One a minute, 43,200 runs, costs 14.41 dollars. The lines cross, highlighted, at about 108,000 invocations a month; above that, Lambda is the dearer engine.">
+        <defs>
+          <filter id="a4cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="97" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a4cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a4cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a4cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a4cL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a4cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a4cB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a4cA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a4cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a4cH" x="30" y="26">ONE JOB SHAPE, TWO ENGINES: THE CROSSOVER</text>
+
+        <g filter="url(#a4cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M110 300 L800 300" marker-end="url(#a4cAr)"/>
+          <path d="M110 300 L110 62" marker-end="url(#a4cAr)"/>
+          <path d="M110 141 L790 141" stroke="#4E5A6B" stroke-width="2.4"/>
+          <path d="M110 300 L745 95" stroke="#183177" stroke-width="2.6"/>
+          <circle cx="112" cy="299" r="5" fill="#183177" stroke="#183177"/>
+          <circle cx="306" cy="237" r="6" fill="#183177" stroke="#183177"/>
+          <circle cx="600" cy="141" r="10" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M306 300 L306 296 M600 300 L600 296 M790 300 L790 296"/>
+        </g>
+
+        <text class="a4cA" x="30" y="50">dollars a month</text>
+        <text class="a4cS" x="102" y="304" text-anchor="end">$0</text>
+
+        <text class="a4cL" x="120" y="128">Fargate, 1 vCPU 2 GB, always on: $36.04 a month</text>
+        <text class="a4cL" x="480" y="84">Lambda, 20 s at 1 GB, per run</text>
+        <text class="a4cS" x="322" y="252">one a minute: $14.41</text>
+        <text class="a4cB" x="616" y="170">crossover: about 108,000 a month</text>
+        <text class="a4cS" x="616" y="188">above it, Lambda is the dearer one</text>
+
+        <text class="a4cA" x="112" y="318" text-anchor="middle">0</text>
+        <text class="a4cA" x="306" y="318" text-anchor="middle">43,200</text>
+        <text class="a4cA" x="600" y="318" text-anchor="middle">108,000</text>
+        <text class="a4cA" x="790" y="318" text-anchor="end">150,000</text>
+        <text class="a4cS" x="118" y="336">one a day: $0.01</text>
+        <text class="a4cA" x="110" y="356">Lambda invocations a month (modelled workload: 20 s at 1 GB each)</text>
+
+        <text class="a4cN" x="30" y="380">Modelled workloads, real prices: us-east-1, AWS Price List, 3 October 2026. Free tier not applied.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange point is where a function stops being the cheaper engine for this job shape; re-verify prices before relying on it</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Three numbers, one crossover<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The same 20-second, 1 GB run. Once a day on Lambda: <strong>$0.01</strong> a month. Once a minute: <strong>$14.41</strong>. A Fargate container at 1 vCPU and 2 GB, always on: <strong>$36.04</strong>. Each Lambda run costs $0.000333534: twenty seconds at $0.0000166667 per GB-second plus its share of $0.20 per million requests. Divide the container's month by that and the lines cross at about <strong>108,000 invocations a month</strong>. All figures: us-east-1, AWS Price List, 3 October 2026, modelled workloads, before any free tier; re-verify prices before relying on them.</p>
+        <p>The surprise for most rooms is how far apart the ends are. One file a minute, all month, is still well under half the cost of the container. A function that runs often is not automatically expensive; a container that runs rarely is.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The rule of thumb, and where it bends<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Spiky and short: functions.</strong> Work that arrives in bursts and finishes well inside 900 seconds fits Lambda's meter, which stops between bursts. <strong>Steady and long: containers.</strong> Work that runs most of the day, or runs past the wall, fits a container, whose meter is running anyway. <strong>Questions asked in SQL: a per-byte engine or a warehouse.</strong> That is not a compute choice at all; it is Athena's bytes against Redshift Serverless's RPU-seconds, and analyst session 6 models where they break even: about 31 queries a day against one busy warehouse hour, about 123 against four (modelled; 20 GB scanned per query, 8 RPU; your numbers will differ).</p>
+        <p>The rule bends at the edges. A job close to the crossover should be decided on the trend, not today's count. Continuous event streams, where work never stops arriving, are their own design problem and belong to <a href="https://phoebefu6.github.io/learn-streaming-data-with-phoebe/">learn streaming data</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the model leaves out<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The comparison is honest about its scope, and yours should be too. It applies no free tier: on a quiet account Lambda's first one million requests and 400,000 GB-seconds a month are free, which moves the cheap end lower still. It prices Fargate always on; a container started only when needed and stopped after is a different, cheaper shape, and how a short task's time is rounded should be read on the Fargate pricing page before you model it. It ignores the people cost, which often decides: a team that already runs containers well may rationally pay the difference. And it uses one Region's list prices, which change without notice.</p>
+        <p>Savings Plans and Reserved Instances change the container side of the comparison and are not taught on these pages. The method transfers even when the prices move: price one run, price one always-on month, divide, and compare against how often the job really runs.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>One a day became one a minute.</strong> A product team moves a partner feed from a daily drop to a file every minute. The data lead's first instinct is to migrate the Lambda ingest to a container "before it gets expensive". Someone prices it first: the same function at one a minute models at $14.41 a month, against $36.04 for the container always on (modelled; us-east-1, AWS Price List, 3 October 2026; re-verify). The function stays, with a note that the question comes back if the feed passes about 108,000 files a month or a run approaches 900 seconds. Constructed; the numbers come from analyst session 5.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Five jobs, five meters</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No console and no account. Take five jobs your team runs or is about to build, and describe each one by four facts before anyone names a service: how long one run takes, how often it runs, how much memory it needs, and which meter that shape belongs on. The engine falls out of the meter, not the other way round. The worked examples below are constructed; your jobs and your numbers will differ.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 252" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A hand-drawn worksheet grid. Columns: job, how long, how often, memory, meter, engine. The first row is filled as a worked example: nightly file to Parquet, 20 seconds, once a day, 1 GB, GB-seconds, Lambda. Two more rows are empty for the learner. An orange tab below states the rule of thumb: spiky and short to a function, steady and long to a container, a SQL question to bytes or RPU.">
+        <defs>
+          <filter id="a4dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="101" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a4dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a4dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a4dH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a4dL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a4dS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a4dB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a4dN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#a4dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="24" width="820" height="164" rx="8" transform="rotate(-0.3 440 106)" fill="#FFFFFF"/>
+          <path d="M30 56 L850 56"/>
+          <path d="M226 24 L226 188 M346 24 L346 188 M466 24 L466 188 M586 24 L586 188 M720 24 L720 188" stroke="#C5CCD8"/>
+          <path d="M40 100 L840 100 M40 144 L840 144" stroke="#E3E7EE"/>
+          <rect x="36" y="61" width="808" height="34" rx="4" fill="#EEF1FA" stroke="#EEF1FA"/>
+          <rect x="30" y="204" width="560" height="30" rx="6" transform="rotate(0.4 310 219)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a4dH" x="44" y="45">JOB</text>
+        <text class="a4dH" x="238" y="45">HOW LONG</text>
+        <text class="a4dH" x="358" y="45">HOW OFTEN</text>
+        <text class="a4dH" x="478" y="45">MEMORY</text>
+        <text class="a4dH" x="598" y="45">METER</text>
+        <text class="a4dH" x="732" y="45">ENGINE</text>
+
+        <text class="a4dL" x="44" y="83">File to Parquet</text>
+        <text class="a4dS" x="238" y="83">20 s</text>
+        <text class="a4dS" x="358" y="83">once a day</text>
+        <text class="a4dS" x="478" y="83">1 GB</text>
+        <text class="a4dS" x="598" y="83">GB-seconds</text>
+        <text class="a4dS" x="732" y="83">Lambda</text>
+        <text class="a4dL" x="44" y="127">Your job 2</text>
+        <text class="a4dL" x="44" y="171">Your job 3</text>
+
+        <text class="a4dB" x="44" y="224">Spiky + short: function. Steady + long: container. SQL: bytes or RPU.</text>
+        <text class="a4dN" x="606" y="224">Four facts first, engine last.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the first row is constructed; the orange tab is the rule every row is checked against</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>List five jobs.</strong> Mix them on purpose: one that reacts to a file landing, one nightly batch, one service that answers requests all day, one analyst's ad hoc SQL, and one dashboard that refreshes on a timer. If your team runs fewer kinds, pick five real ones anyway; the sheet is about your estate, not the textbook mix.</p>
+      </div>
+      <div class="step">
+        <p><strong>Write the four facts for each.</strong> How long one run takes today, and its trend. How often it runs. How much memory it needs at peak. Whether its work is code running or a SQL question reading data. Leave the engine column empty until all four are written.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: five jobs, four facts (constructed)</span>1 File lands, convert to Parquet   20 s       about once a day   1 GB
+2 Nightly reconciliation            22 min     once a night       3 GB
+3 Scoring service for the app       always on  steady all day     4 GB
+4 Analyst ad hoc SQL on the lake    seconds    about 20 a day     n/a, SQL
+5 Executive dashboard refresh       seconds    every 5 minutes    n/a, SQL</div>
+      </div>
+      <div class="step">
+        <p><strong>Pick the meter, then the engine.</strong> Ask which meter would stop when the job stops. Then check the walls from Part 2: duration under 900 seconds, memory under 10,240 MB, payloads passed as S3 keys.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: meter and engine (constructed)</span>1 GB-seconds     Lambda      (short, spiky, well inside every wall)
+2 vCPU-hours     Fargate     (past the 900 s wall; or split it per region)
+3 vCPU-hours     Fargate     (steady all day, so the meter runs anyway)
+4 bytes scanned  Athena      (pays only when someone asks; lay out the data)
+5 RPU or bytes   decide by count: 288 refreshes a day; analyst session 6</div>
+      </div>
+      <div class="step">
+        <p><strong>Price the close calls.</strong> For any job near a boundary, write the one-line sum from Part 3: cost of one run, times runs a month, against the always-on month. Mark the trigger that would reopen the choice, such as "past 600 seconds" or "past about 108,000 runs a month for this shape".</p>
+      </div>
+      <div class="step">
+        <p><strong>Write one sentence per job.</strong> "This runs on Lambda because it is short and spiky, and we revisit it if a run passes 600 seconds." The sentence is what survives into the design review; the table is how you got there. Bring it to session 6, where it becomes the engines row of the one-page platform.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the sentence for job 2 (constructed)</span>Nightly reconciliation moves to a Fargate task that runs and stops,
+because one run already takes 22 minutes and Lambda stops at 900 s.
+Revisit if it can be split into per-region runs under 10 minutes each.</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The sheet that picks the engine first</span>everything:     "we are a serverless shop", so Lambda
+long jobs:      raise the timeout (it cannot go past 900 s)
+dashboards:     a container polling the warehouse every 5 minutes
+always-on:      nobody checks how much of the day it works</div>
+
+    <div class="callout tip">
+      <p><strong>Ask the idle question.</strong> For every always-on service in the sheet, write down roughly how many minutes of each day it does real work. If the answer is "twenty seconds", the meter is wrong, whatever the engine's reputation. If the answer is "most of the day", a container is the honest choice and nobody should feel they failed a serverless test.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 5</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Find the longest function.</strong> Ask your platform owner for the Lambda function whose longest run in the last month came closest to 900 seconds, and whether anything alarms before it reaches the wall.</li>
+      <li><strong>Find the idlest container.</strong> Ask for the always-on service that does the least work per day. Price it with Part 3's method against the same work run as a function.</li>
+      <li><strong>Find the warehouse's quiet hours.</strong> If you run Redshift Serverless, ask whether anything keeps a connection pool open overnight, and whether cancelled queries show up in the bill.</li>
+      <li><strong>Finish the sheet.</strong> Complete the five rows with someone who runs the jobs, then bring it: session 5 reads the bill these choices produce, and session 6 places them on the one-page platform.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 4 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · A team proposes running a job that takes 20 minutes as a single Lambda function, with 10 GB of memory to be safe. What is wrong with the plan?</p>
+      <button class="qopt" type="button">A · Nothing; 10 GB of memory lets a function run as long as it needs</button>
+      <button class="qopt" type="button">B · It will work but cost more than a container at any frequency</button>
+      <button class="qopt" type="button">C · Lambda's timeout is 900 seconds, 15 minutes, and cannot be raised; the run will be stopped. Split the work, or use a container</button>
+      <button class="qopt" type="button">D · Lambda only allows 1 GB of memory</button>
+      <p class="qwhy">The "Lambda quotas" page gives the timeout as "900 seconds (15 minutes)." Memory runs from 128 MB to 10,240 MB and buys CPU, not time. A run past the wall is stopped, whatever its memory.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Redshift Serverless bills "in RPU-hours on a per-second basis, with a 60-second minimum charge." What does that mean for a 5-second query on an idle 8 RPU warehouse?</p>
+      <button class="qopt" type="button">A · It is billed as 60 seconds of capacity: $0.0500 rather than the $0.0042 five seconds would cost (modelled; us-east-1, AWS Price List, 3 October 2026)</button>
+      <button class="qopt" type="button">B · It is free, because the warehouse was idle</button>
+      <button class="qopt" type="button">C · It is billed for a full hour of capacity</button>
+      <button class="qopt" type="button">D · It is billed for the bytes the query scanned, like Athena</button>
+      <p class="qwhy">Per-second billing with a 60-second floor means short, scattered queries each pay for a minute. The 8 RPU figures are analyst session 6's model at $0.375 per RPU-hour; re-verify the price before relying on it. Idle time with no queries is not billed for compute.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · An executive dashboard refreshes a SQL query against the lake every 5 minutes. Which meter should the team be comparing?</p>
+      <button class="qopt" type="button">A · Lambda GB-seconds, because the refresh is short</button>
+      <button class="qopt" type="button">B · Fargate vCPU-hours, because the dashboard is always on</button>
+      <button class="qopt" type="button">C · None; dashboards do not cost anything once built</button>
+      <button class="qopt" type="button">D · Bytes scanned on Athena against RPU-seconds on Redshift Serverless, decided by how many queries a day and how much each one reads</button>
+      <p class="qwhy">A SQL question is priced by a query engine, not by compute you run yourself. Analyst session 6 models the break-even at about 31 queries a day against one busy warehouse hour and about 123 against four (modelled; your numbers will differ). Session 5 shows how layout changes the bytes side.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Lambda's walls: 900 s, 128 to 10,240 MB, one vCPU at 1,769 MB, /tmp, packages, payloads, concurrency</span><span class="note">AWS Lambda Developer Guide, "Lambda quotas", read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Lambda billed per 1 ms; free tier 1M requests and 400,000 GB-seconds</span><span class="note">Lambda pricing page, read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Redshift Serverless: per second, 60-second minimum, no compute when idle, storage separate, open pools and cancelled queries</span><span class="note">Amazon Redshift Management Guide, "Compute capacity for Amazon Redshift Serverless", "Billing for Amazon Redshift Serverless"</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Athena per byte, rounded to the megabyte, 10 MB minimum</span><span class="note">Athena pricing page</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Lambda, Fargate, Redshift Serverless and Athena prices</span><span class="note">AWS Price List bulk API, us-east-1 offers for AWSLambda, AmazonECS, AmazonRedshift, AmazonAthena, retrieved 2026-10-03; re-verify before relying on them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">$0.01, $14.41, $36.04; crossover about 108,000 a month; break-even 31 and 123 queries a day</span><span class="note">Modelled workloads at real prices, computed in analyst sessions 5 and 6</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">EC2 instance families, networking, Savings Plans, Reserved Instances, EMR</span><span class="note">Named, not taught; pipeline design in learn data engineering, inference infrastructure in learn AI infra</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The waiting container, the nightly job, one a day to one a minute; the five-job sheet</span><span class="note">Constructed composites of common patterns, not specific incidents</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 4 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Four meters</b><span>Athena: bytes. Lambda: GB-seconds plus requests. Fargate: hours it exists. Redshift Serverless: RPU-seconds while queries run.</span></div>
+      <div class="cheat-item"><b>Minimums</b><span>Athena 10 MB per query. Redshift Serverless 60 seconds. Lambda rounds to 1 ms.</span></div>
+      <div class="cheat-item"><b>The 900-second wall</b><span>Lambda stops a run at 15 minutes. Split the work or use a container; tuning does not move it.</span></div>
+      <div class="cheat-item"><b>Memory buys CPU</b><span>128 to 10,240 MB; one vCPU at 1,769 MB. Pass S3 keys, not data: 6 MB sync, 1 MB async.</span></div>
+      <div class="cheat-item"><b>Three numbers</b><span>20 s at 1 GB: $0.01 a month daily, $14.41 every minute; Fargate always on $36.04 (us-east-1 list prices, 3 Oct 2026).</span></div>
+      <div class="cheat-item"><b>Rule of thumb</b><span>Spiky and short: function. Steady and long: container. SQL: bytes or warehouse, decided by count.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>The bill you did not plan. Tonight's choices set the meters; session 5 reads what they add up to. Storing a terabyte is cheap and scanning it carelessly is not, small files cost twice, an idle warehouse can still bill, and AWS Budgets and cost allocation tags only help if someone turned them on before the month started.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 4 of 6 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="a3-who-can-touch-what.html">← Prev: Who can touch what</a> &nbsp;·&nbsp; <a href="a5-the-bill-you-did-not-plan.html">Next: The bill you did not plan →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

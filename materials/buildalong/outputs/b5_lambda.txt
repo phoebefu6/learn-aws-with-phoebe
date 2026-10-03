@@ -1,0 +1,7 @@
+{'in': 'raw/nyc_taxi/2024-01-15.csv', 'out': 'curated/nyc_taxi/2024-01-15.parquet', 'bytes_in': 262544, 'bytes_out': 81729}
+handler ran in 0.04 s on this laptop
+registered: ingest | timeout 900 s | memory 1024 MB
+moto also accepted a 901 s timeout; real Lambda caps it at 900 s. A mock is not a quota check.
+one file a day, 20 s at 1 GB:      Lambda $0.01/month
+one file a minute, 20 s at 1 GB:   Lambda $14.41/month
+a container always on, 1 vCPU 2 GB: Fargate $36.04/month

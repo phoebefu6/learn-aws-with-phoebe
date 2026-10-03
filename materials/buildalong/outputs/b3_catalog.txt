@@ -1,0 +1,4 @@
+table: lake.nyc_taxi | 19 columns | partition key: pickup_date | s3://acme-lake/curated/nyc_taxi/
+first three columns: [('vendorid', 'int'), ('tpep_pickup_datetime', 'timestamp'), ('tpep_dropoff_datetime', 'timestamp')]
+partitions registered: 31 | first: s3://acme-lake/curated/nyc_taxi/pickup_date=2024-01-01/
+a query on 15-21 January needs 7 of 31 partitions

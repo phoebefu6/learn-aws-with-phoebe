@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 5 of 6. The bill you did not plan: why scanning costs more than storing, the quiet line items that grow without anyone deciding, and the AWS Budgets alerts and cost allocation tags that only help if they were switched on first.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="The bill you did not plan - learn aws with phoebe">
+<meta property="og:description" content="Leader session 5 of 6. The same one-week question costs $15,000 a month on raw CSV and $88 on partitioned Parquet. Then the quiet line items, and the alerts that must be on before the month starts.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/a5-the-bill-you-did-not-plan.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The bill you did not plan - learn aws with phoebe">
+<meta name="twitter:description" content="Leader session 5 of 6. Scans, the quiet line items, and catching the bill before it arrives.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 5 · The bill you did not plan - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Leader session 5 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Leader track · Session 5 of 6</div>
+    <h1>The bill you <span class="accent">did not plan</span></h1>
+    <p class="sub">Nobody signs off on a $15,000 query habit. It arrives one dashboard refresh at a time, on a layout chosen in a hurry, next to a handful of small line items nobody priced because each one looked like rounding. Tonight we read a data team's bill the way it is actually built: the scanning meter first, then the quiet minimums and fees underneath it, and finally the two switches, a budget alert and activated cost tags, that have to be on before the month starts if they are going to help at all.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Applied</span>
+      <span class="chip audience">Data and AI leaders, managers, architects</span>
+      <span class="chip audience">No code, no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Scans, quiet line items, early warning</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: a five-line guardrail plan</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 1 gave you one sentence: storing a terabyte in S3 Standard costs $23.55 a month, and scanning it as CSV a hundred times a day through Athena costs $15,000 (us-east-1, AWS Price List, 3 October 2026; re-verify before relying on either). Session 4 named the meters. Tonight we take the bill apart. Most unplanned spend on a data platform is not one big mistake. It is a layout that makes every question read too much, plus a few minimums and fees that are each tiny, plus nobody noticing until the invoice, because the alert and the tags were never switched on.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A five-line cost guardrail plan for your data platform: a budget with a forecast alert, the tag keys you will activate, one layout rule, one lifecycle rule and one warehouse idle check, each with an owner. And a sharper question for the next estimate that lands on your desk: not "how many terabytes?" but "how many bytes does each question read, and who would hear about it first if that number jumped?"</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers what a scan costs, by layout</span>
+      <h2>The same question, three prices</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Athena bills $5.00 per terabyte scanned, "rounded up to the nearest megabyte, with a 10 MB minimum per query" (Athena pricing page; us-east-1, AWS Price List, 3 October 2026). So the price of a question is decided less by the question than by how the files underneath it are laid out. Analyst session 4 measured the bytes on 100,000 real New York taxi trips stored three ways, and analyst session 8 scaled them to a terabyte of CSV asked 100 times a day. The bytes are measured; the scaling is modelled.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Monthly Athena cost for two questions, each asked 100 times a day of the equivalent of 1,024 GB of CSV, on three layouts. One-week question, pickups per zone for 15 to 21 January: CSV 15,000 dollars, a single Parquet file 1,130 dollars, Parquet partitioned by day 88 dollars. Whole-month question, average tip by payment type: CSV 15,000 dollars, single Parquet 293 dollars, partitioned 566 dollars, highlighted because partitioning costs more on a whole-month question. At sample size every query bills the 10 MB minimum, 0.000048 dollars.">
+        <defs>
+          <filter id="a5aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="113" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a5aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a5aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a5aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a5aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a5aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a5aB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a5aV { font: 800 16px Inter, sans-serif; fill: #0E1F52; }
+          .a5aA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a5aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a5aH" x="30" y="26">ONE TERABYTE OF CSV-EQUIVALENT, 100 QUESTIONS A DAY, ONE MONTH OF ATHENA</text>
+
+        <g filter="url(#a5aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="230" y="66" width="540" height="20" rx="3" transform="rotate(-0.3 500 76)" fill="url(#a5aHc)"/>
+          <rect x="230" y="96" width="41" height="20" rx="3" transform="rotate(1.5 250 106)" fill="#EEF1FA"/>
+          <rect x="230" y="126" width="4" height="20" rx="1" fill="#FFFFFF"/>
+          <rect x="230" y="190" width="540" height="20" rx="3" transform="rotate(0.3 500 200)" fill="url(#a5aHc)"/>
+          <rect x="230" y="220" width="11" height="20" rx="2" fill="#EEF1FA"/>
+          <rect x="230" y="250" width="21" height="20" rx="2" transform="rotate(-2 240 260)" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M226 60 L226 152 M226 184 L226 276" stroke="#C5CCD8"/>
+        </g>
+
+        <text class="a5aA" x="40" y="54">One-week question: pickups per zone, 15-21 January</text>
+        <text class="a5aL" x="40" y="81">CSV, one file</text>
+        <text class="a5aV" x="780" y="82">$15,000</text>
+        <text class="a5aL" x="40" y="111">Parquet, one file</text>
+        <text class="a5aV" x="282" y="112">$1,130</text>
+        <text class="a5aS" x="350" y="111">7.53% of the CSV bytes: only the needed columns are read</text>
+        <text class="a5aL" x="40" y="141">Partitioned by day</text>
+        <text class="a5aV" x="244" y="142">$88</text>
+        <text class="a5aS" x="290" y="141">0.58% of the bytes: only 7 of 31 daily folders are opened</text>
+
+        <text class="a5aA" x="40" y="178">Whole-month question: average tip by payment type</text>
+        <text class="a5aL" x="40" y="205">CSV, one file</text>
+        <text class="a5aV" x="780" y="206">$15,000</text>
+        <text class="a5aL" x="40" y="235">Parquet, one file</text>
+        <text class="a5aV" x="252" y="236">$293</text>
+        <text class="a5aS" x="310" y="235">1.96%: two columns of one file</text>
+        <text class="a5aL" x="40" y="265">Partitioned by day</text>
+        <text class="a5aV" x="262" y="266">$566</text>
+        <text class="a5aB" x="320" y="265">3.78%: 31 small files carry 31 sets of overhead, so it costs more</text>
+
+        <text class="a5aS" x="40" y="298">At sample size, 10 MB of CSV, every one of these questions bills Athena's 10 MB minimum: $0.000048 each.</text>
+
+        <text class="a5aN" x="30" y="322">Bytes measured on 100,000 real trips, scaled to 1,024 GB (modelled); us-east-1, AWS Price List, 3 Oct 2026.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange bar is the layout that wins one question and loses the other; bars are to scale, re-verify prices before relying on them</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Three layouts, one question<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Take the one-week question: how many trips started in each pickup zone between 15 and 21 January. On raw CSV, Athena has to read every byte of every row, because a CSV file has no index and no columns it can skip: <strong>$5.00 a query, $15,000 a month</strong> at 100 queries a day. Convert the same data to one Parquet file and Athena reads only the columns it needs: <strong>$1,130 a month</strong>. Partition that Parquet by pickup day, so each day sits under its own key prefix, and Athena opens only the seven daily folders the question names: <strong>$88 a month</strong>. Same answer every time; analyst session 4 checked that the top three zones and their counts are identical across all three layouts.</p>
+        <p>All figures: measured bytes on the 100,000-row sample, scaled linearly to 1,024 GB of CSV and 100 queries a day for 30 days (modelled), at $5.00 per TB; us-east-1, AWS Price List, 3 October 2026; re-verify before relying on them. Your numbers will differ, but the order of magnitude between the rows is the lesson.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>When partitions cost more<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Now ask a whole-month question: the average tip by payment type. The single Parquet file reads two columns once: <strong>$293 a month</strong>. The partitioned layout has to open all 31 daily files, and each small file carries its own footer and overhead, so it reads more: <strong>$566 a month</strong> (modelled, same prices and caveats). Partitioning is a bet on how people filter. It pays when most questions name a narrow slice of the partition key, and it costs when most questions span all of it.</p>
+        <p>Be honest about the size of this effect. On the sample each daily file is only 73,785 to 113,419 bytes, so the overhead is a large share of each one. Scaling linearly to a terabyte keeps that share constant, which overstates it: at real scale each day's file would be far larger and the fixed overhead a smaller fraction. The direction is real; the ratio at your scale needs measuring, not quoting.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why the proof of concept looked cheap<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The whole sample is about 10 MB of CSV. Athena bills a minimum of 10 MB per query, so at proof-of-concept size every layout costs the same: <strong>$0.000048 a query</strong> (us-east-1, AWS Price List, 3 October 2026). Raw CSV and partitioned Parquet are indistinguishable on the bill, and a team concludes "Athena is basically free". The minimum hides the difference until the data grows past it, and by then the dashboards are built on whatever layout the proof of concept used.</p>
+        <p>AWS's own claim is that you "can save up to 90% per query and get better performance by compressing, partitioning, and converting your data into columnar formats" (Athena pricing page). The measured sample does better than that on narrow questions and worse on wide ones: reading every column of the month from one Parquet file still costs $3,547 a month against CSV's $15,000 (modelled), a saving of about three quarters. Treat "up to 90%" as AWS's ceiling, not your forecast. Note too that Athena bills "the number of bytes scanned before decompression", so compression lowers the bill directly. Why columnar formats read less is a file-format question, taught in <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/">learn AI infra</a>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The BI tool that refreshed the raw folder.</strong> An analyst connects a BI tool to the quickest table to find, which is the raw CSV landing area, and sets the dashboard to refresh every few minutes so the numbers look live. Every refresh reads every byte, the question is about last week, and nobody sees a problem because the proof of concept ran on a few megabytes under the 10 MB minimum. The fix took one afternoon: point the dashboard at the partitioned Parquet table and refresh hourly. Constructed; the per-layout costs are the modelled figures above.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the quieter line items</span>
+      <h2>The small print under every meter</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Scanning is the loud line on a data bill. Underneath each meter sits a rule that is reasonable on its own and expensive in bulk: a minimum per query, a minimum per object, a minimum per warehouse start, a fee per thousand objects, a free allowance that ends. None of them is hidden; all of them are on AWS's own pages. They become a surprise only because an estimate priced the headline unit and stopped.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 392" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A month's data bill drawn as five stacked strips, one per meter. Each strip has a hachured part, what the estimate priced, and a lighter part, the quiet line items. Bytes stored in S3: Standard-IA's 128 KB and 30-day minimums, and Intelligent-Tiering's monitoring fee of 0.0025 dollars per 1,000 objects. Bytes scanned in Athena: many small files and cancelled queries still billed. Time in Redshift Serverless, highlighted: the 60-second minimum, so a 5-second query on an idle 8 RPU warehouse bills 0.0500 dollars rather than 0.0042, and open connection pools can generate cost. Requests in S3: 0.005 dollars per 1,000 PUTs. Data transfer: in from the internet free, 100 GB a month out free, then charged. Strip widths are illustrative.">
+        <defs>
+          <filter id="a5bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="127" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a5bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a5bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a5bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a5bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a5bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a5bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a5bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a5bH" x="30" y="26">ONE MONTH'S DATA BILL, SPLIT BY METER: WHAT WAS PRICED AND WHAT WAS NOT</text>
+
+        <g filter="url(#a5bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="200" y="44" width="300" height="44" rx="5" transform="rotate(-0.4 350 66)" fill="url(#a5bHc)"/>
+          <rect x="500" y="44" width="340" height="44" rx="5" transform="rotate(0.3 670 66)" fill="#EEF1FA"/>
+          <rect x="200" y="100" width="260" height="44" rx="5" transform="rotate(0.3 330 122)" fill="url(#a5bHc)"/>
+          <rect x="460" y="100" width="380" height="44" rx="5" transform="rotate(-0.3 650 122)" fill="#EEF1FA"/>
+          <rect x="200" y="156" width="220" height="44" rx="5" transform="rotate(-0.3 310 178)" fill="url(#a5bHc)"/>
+          <rect x="420" y="156" width="420" height="44" rx="5" transform="rotate(0.4 630 178)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="200" y="212" width="180" height="44" rx="5" transform="rotate(0.4 290 234)" fill="url(#a5bHc)"/>
+          <rect x="380" y="212" width="460" height="44" rx="5" transform="rotate(-0.2 610 234)" fill="#EEF1FA"/>
+          <rect x="200" y="268" width="120" height="44" rx="5" transform="rotate(-0.5 260 290)" fill="url(#a5bHc)"/>
+          <rect x="320" y="268" width="520" height="44" rx="5" transform="rotate(0.2 580 290)" fill="#EEF1FA"/>
+          <rect x="30" y="330" width="26" height="14" rx="2" fill="url(#a5bHc)"/>
+          <rect x="250" y="330" width="26" height="14" rx="2" fill="#EEF1FA"/>
+          <rect x="450" y="330" width="26" height="14" rx="2" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a5bL" x="30" y="63">Bytes stored, S3</text>
+        <text class="a5bS" x="30" y="79">per GB-month</text>
+        <text class="a5bS" x="512" y="63">Standard-IA: 128 KB and 30-day minimums</text>
+        <text class="a5bS" x="512" y="79">Intelligent-Tiering: $0.0025 per 1,000 objects</text>
+
+        <text class="a5bL" x="30" y="119">Bytes scanned, Athena</text>
+        <text class="a5bS" x="30" y="135">per TB, 10 MB minimum</text>
+        <text class="a5bS" x="472" y="119">many small files: poor overall query performance</text>
+        <text class="a5bS" x="472" y="135">cancelled queries billed for data scanned</text>
+
+        <text class="a5bL" x="30" y="175">Time, Redshift</text>
+        <text class="a5bS" x="30" y="191">per RPU-second, 60 s min</text>
+        <text class="a5bB" x="432" y="175">60 s minimum: 5 s on idle 8 RPU bills $0.0500, not $0.0042</text>
+        <text class="a5bB" x="432" y="191">open connection pools can generate cost</text>
+
+        <text class="a5bL" x="30" y="231">Requests, S3</text>
+        <text class="a5bS" x="30" y="247">per 1,000</text>
+        <text class="a5bS" x="392" y="231">PUT $0.005 per 1,000: every small file is one more request</text>
+        <text class="a5bS" x="392" y="247">GET $0.0004 per 1,000</text>
+
+        <text class="a5bL" x="30" y="287">Data transfer</text>
+        <text class="a5bS" x="30" y="303">per GB out</text>
+        <text class="a5bS" x="332" y="287">in from the internet: free</text>
+        <text class="a5bS" x="332" y="303">out: 100 GB a month free across services, then charged</text>
+
+        <text class="a5bS" x="64" y="341">what the estimate priced</text>
+        <text class="a5bS" x="284" y="341">the quiet line items</text>
+        <text class="a5bS" x="484" y="341">the worked example in this Part</text>
+
+        <text class="a5bN" x="30" y="372">Strip widths are illustrative, not measured. Every quiet item is a documented AWS rule or list price.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange strip is the one a quiet warehouse can still bill; prices us-east-1, AWS Price List, 3 October 2026, re-verify before relying on them</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Small files cost twice<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Athena's own guidance is blunt: "Datasets that consist of many small files result in poor overall query performance", and "For small files, the overhead of the columnar file format outweighs the benefits." You saw the bill side in Part 1: the partitioned sample split into 31 files of 73,785 to 113,419 bytes, and a whole-month question read nearly twice the bytes of the single file. The second cost is requests: every file is one more PUT when it is written, at $0.005 per 1,000, and one more GET each time it is read, at $0.0004 per 1,000 (us-east-1, AWS Price List, 3 October 2026; re-verify).</p>
+        <p>What AWS does not give is a target file size. You will hear "aim for 128 MB files" quoted as a rule; Athena's documentation gives 128 MB only as the default Parquet row group size, not as a file-size target, and these pages found no file-size number at source. Ask instead whether files are many, small and rarely compacted. How a team schedules compaction belongs to pipeline design, in <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">learn data engineering</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The warehouse that bills while nobody is asking<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Redshift Serverless bills "in RPU-hours on a per-second basis, with a 60-second minimum charge", and nothing for compute while no queries run. That second half is real and is why it is attractive. The first half is the trap for scattered work: a 5-second query on an idle 8 RPU warehouse bills <strong>$0.0500, not the $0.0042</strong> five seconds would cost (modelled in analyst session 6 at $0.375 per RPU-hour; us-east-1, AWS Price List, 3 October 2026; re-verify). One query a minute, each waking an idle warehouse, pays for a full minute every time.</p>
+        <p>Two more lines from the same billing page. "Maintaining open connection pools can generate costs even when no actual user workloads are running": a BI tool that holds connections open overnight can keep the meter alive. And "If you run a query and cancel it before it finishes, you are still billed for the time the query ran." Athena has the same rule in its own unit: "Canceled queries are billed for the total amount of data scanned when the query is canceled." Failed queries and DDL statements, by contrast, are not charged on Athena.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Storage minimums and the monitoring fee<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Cheaper storage classes carry floors. Standard-IA bills a minimum of 30 days and 128 KB per object: "If an object is less than 128 KB, Amazon S3 charges you for 128 KB", and an object deleted early is "charged for 30 days" (Amazon S3 User Guide, "Understanding and managing Amazon S3 storage classes"). Glacier Instant Retrieval's minimum is 90 days and Deep Archive's 180. A lifecycle rule that moves objects out early is "charged for the remainder of that duration". Session 2 drew the waterfall; the bill-side point is that a cheap class with a short-lived, small-object workload can cost more than Standard.</p>
+        <p>Intelligent-Tiering moves objects between tiers on its own and has no retrieval fees, in exchange for a monitoring and automation fee of <strong>$0.0025 per 1,000 objects a month</strong> (S3 pricing page; us-east-1, AWS Price List, 3 October 2026; re-verify). Objects under 128 KB are not monitored and not eligible for auto-tiering. The fee is per object, not per gigabyte, so it is negligible on a few large files and noticeable on hundreds of millions of small ones. Since September 2024, lifecycle rules by default do not transition objects under 128 KB at all.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Data transfer: free in, free up to a point out<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>"Data transferred in from the internet" is on S3's free list, and "AWS customers receive 100GB of data transfer out to the internet free each month, aggregated across all AWS Services and Regions (except China and GovCloud)." Past that, transfer out is charged per gigabyte. These pages quote no per-gigabyte rate for it, because none was verified for them: read the current rate on the S3 pricing page before you price a workload that sends data out, such as a partner extract or a dashboard tool hosted outside AWS. Network design beyond that is not covered on these pages.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The cheaper class that cost more.</strong> A team moves its event logs, millions of objects of a few kilobytes each, to Standard-IA to save money, and deletes them after a week. Every object is billed as 128 KB, and every deletion before day 30 is billed as 30 days. The class with the lower price per gigabyte produced the higher bill, and nobody had changed anything but a storage class. The fix was to batch the small files into larger ones before they landed and keep the short-lived prefix in Standard. Constructed; the minimums are from the S3 User Guide.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers catching the bill before it arrives</span>
+      <h2>An alert, a tag, and a rule that deletes</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">The invoice is the slowest possible alarm. AWS gives a data leader three earlier ones, and each has a delay you have to plan around. AWS Budgets warns on spend, but its data refreshes only a few times a day. Cost allocation tags say whose spend it was, but only after someone activates them, which takes up to two days. And a lifecycle rule stops the storage line growing without anyone remembering to delete anything. All three work only if they were set up before the month you need them in.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 366" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A timeline from 48 hours before to 24 hours after a runaway query starts. Top lane: a cost allocation tag key is added to resources at minus 48 hours, takes up to 24 hours to appear for activation, then up to 24 hours to activate, finishing at zero, the moment spend starts; a dashed line marks that the tag must already be active there. Middle lane: spend begins at zero; the first stretch, highlighted, is not yet visible; after that it shows. Bottom lane: AWS Budgets data updates up to three times a day, drawn as three dots after zero; an alert can arrive only after an update. Forecast alerts watch where spend is heading.">
+        <defs>
+          <filter id="a5cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="139" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a5cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a5cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a5cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a5cL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a5cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a5cB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a5cA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a5cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a5cH" x="30" y="26">FROM A CHARGE TO AN ALERT: WHERE THE HOURS GO</text>
+
+        <g filter="url(#a5cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M607 58 L607 294" stroke="#183177" stroke-dasharray="6 5"/>
+          <rect x="140" y="82" width="231" height="34" rx="5" transform="rotate(-0.4 255 99)" fill="#FFFFFF"/>
+          <rect x="375" y="82" width="228" height="34" rx="5" transform="rotate(0.4 489 99)" fill="#EEF1FA"/>
+          <rect x="611" y="176" width="129" height="36" rx="5" transform="rotate(-0.6 675 194)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="744" y="176" width="94" height="36" rx="5" transform="rotate(0.5 791 194)" fill="url(#a5cHc)"/>
+          <circle cx="685" cy="258" r="6" fill="#183177" stroke="#183177"/>
+          <circle cx="762" cy="258" r="6" fill="#183177" stroke="#183177"/>
+          <circle cx="834" cy="258" r="6" fill="#183177" stroke="#183177"/>
+          <path d="M140 300 L846 300" marker-end="url(#a5cAr)"/>
+          <path d="M140 296 L140 304 M373 296 L373 304 M607 296 L607 304"/>
+        </g>
+
+        <text class="a5cB" x="600" y="50" text-anchor="end">spend starts here: the tag must already be active</text>
+
+        <text class="a5cL" x="30" y="96">Cost allocation tag</text>
+        <text class="a5cS" x="30" y="112">must be activated</text>
+        <text class="a5cS" x="140" y="74">key added to resources</text>
+        <text class="a5cS" x="152" y="103">up to 24 h: key appears</text>
+        <text class="a5cS" x="387" y="103">up to 24 h: key activates</text>
+
+        <text class="a5cL" x="30" y="192">Spend</text>
+        <text class="a5cS" x="30" y="208">a runaway query loop</text>
+        <text class="a5cS" x="150" y="199">forecast alerts watch where spend is heading</text>
+        <text class="a5cB" x="621" y="199">not yet visible</text>
+
+        <text class="a5cL" x="30" y="254">AWS Budgets</text>
+        <text class="a5cS" x="30" y="270">up to 3 updates a day</text>
+        <text class="a5cS" x="150" y="262">data updated up to three times a day</text>
+        <text class="a5cB" x="840" y="286" text-anchor="end">an alert follows an update</text>
+
+        <text class="a5cA" x="140" y="318">-48 h</text>
+        <text class="a5cA" x="373" y="318" text-anchor="middle">-24 h</text>
+        <text class="a5cA" x="607" y="318" text-anchor="middle">0 h</text>
+        <text class="a5cA" x="840" y="318" text-anchor="end">+24 h</text>
+
+        <text class="a5cN" x="30" y="348">Tag times are AWS's stated maxima; AWS gives no number for the Budgets delay. Constructed timeline.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange stretch is spend that has happened but no alert can see yet; the tag lane has to finish before it starts</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Budgets: actual and forecast<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>AWS Budgets lets you "be alerted for both actual (after accruing) and forecasted (before accruing) spends". The actual alert tells you that money has gone. The forecast alert tells you where the month is heading while there is still time to act, which is the one a data leader should care about most: a dashboard reading raw CSV shows up as a steep forecast days before it shows up as a large actual.</p>
+        <p>Two caveats, both from AWS's own page. "AWS Budgets information is updated up to three times a day", so a runaway query can run for hours before the data the alert reads has moved. And "There can be a delay between when you incur a charge and when you receive a notification from AWS Budgets". AWS gives no number for that delay, so neither do these pages. Design for it: a budget is an early warning, not a circuit breaker.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Tags have to be switched on first<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A cost allocation tag is a key such as <strong>team</strong> or <strong>dataset</strong> on a resource, used to split the bill. Tagging the resource is not enough: "For tags to appear on your billing reports, you must activate them." And activation is slow by design: "it can take up to 24 hours for the tag keys to appear on your cost allocation tags page for activation. It can then take up to 24 hours for tag keys to activate." Up to two days, in other words, from tagging to a report that can answer "whose spend was that?". Activate the keys when the platform is built, not on the morning the bill arrives.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Lifecycle as a cost control<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Well-Architected Data Analytics Lens, best practice 13.1: "If data is stored in Amazon S3, use Amazon S3 Lifecycle configurations to expire data automatically." Raw landing files that have been converted, query results nobody reopens, and intermediate outputs of a job are the usual candidates. The rule works without anyone remembering, and session 2 showed that no bucket policy can block it, so an expiration rule deserves the same review as a delete permission. The Lens was last updated on 22 December 2023, almost three years ago: read it as sound principle, not a current product list.</p>
+        <p>Combine it with the storage minimums from Part 2. AWS's own example rule moves objects to Standard-IA "30 days after creation"; that is an example, not a requirement, but it lines up with the 30-day minimum charge so an object is not billed for days it no longer exists.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The weekend nobody could attribute.</strong> A scheduled job starts rerunning a wide query in a loop on a Friday evening. The budget's actual alert lands on Saturday. On Monday the platform lead opens the cost report to find which team's job it was, and the tag column is empty: the keys had been added to every resource months earlier but never activated. Activating them that morning helped the next incident, not this one. Constructed; the delays are AWS's documented ones.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>A five-line cost guardrail plan</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No console and no account. One sheet, five lines, each with a setting, an owner and how often someone checks it. Every line answers one part of tonight: a budget that warns early, tags that say whose spend it was, a layout rule that keeps scans narrow, a lifecycle rule that keeps storage from piling up, and an idle check for the warehouse. The worked examples are constructed; your thresholds and your numbers will differ.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 262" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A hand-drawn worksheet with five rows and five columns: line, guardrail, setting, owner, checked. The first row is filled as a worked example: budget with forecast alert, a monthly cap with a forecast alert at 80 percent, owned by the platform lead, checked weekly. The other four rows name the guardrails and are left blank: tag keys activated, layout rule, lifecycle rule, warehouse idle check. An orange tab below says to set them before the month starts.">
+        <defs>
+          <filter id="a5dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="151" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a5dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a5dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a5dH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a5dL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a5dS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a5dB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a5dN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#a5dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="24" width="820" height="182" rx="8" transform="rotate(-0.3 440 115)" fill="#FFFFFF"/>
+          <path d="M30 56 L850 56"/>
+          <path d="M106 24 L106 206 M316 24 L316 206 M626 24 L626 206 M752 24 L752 206" stroke="#C5CCD8"/>
+          <path d="M40 86 L840 86 M40 116 L840 116 M40 146 L840 146 M40 176 L840 176" stroke="#E3E7EE"/>
+          <rect x="36" y="60" width="808" height="24" rx="4" fill="#EEF1FA" stroke="#EEF1FA"/>
+          <rect x="30" y="220" width="420" height="28" rx="6" transform="rotate(0.5 240 234)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a5dH" x="44" y="45">LINE</text>
+        <text class="a5dH" x="118" y="45">GUARDRAIL</text>
+        <text class="a5dH" x="328" y="45">SETTING</text>
+        <text class="a5dH" x="638" y="45">OWNER</text>
+        <text class="a5dH" x="764" y="45">CHECKED</text>
+
+        <text class="a5dL" x="44" y="77">1</text>
+        <text class="a5dL" x="118" y="77">Budget + forecast alert</text>
+        <text class="a5dS" x="328" y="77">monthly cap, forecast alert at 80%</text>
+        <text class="a5dS" x="638" y="77">platform lead</text>
+        <text class="a5dS" x="764" y="77">weekly</text>
+        <text class="a5dL" x="44" y="106">2</text>
+        <text class="a5dL" x="118" y="106">Tag keys activated</text>
+        <text class="a5dL" x="44" y="136">3</text>
+        <text class="a5dL" x="118" y="136">Layout rule</text>
+        <text class="a5dL" x="44" y="166">4</text>
+        <text class="a5dL" x="118" y="166">Lifecycle rule</text>
+        <text class="a5dL" x="44" y="196">5</text>
+        <text class="a5dL" x="118" y="196">Warehouse idle check</text>
+
+        <text class="a5dB" x="44" y="239">Set before the month starts, not after the bill.</text>
+        <text class="a5dN" x="472" y="239">Five lines, five owners. A blank owner is the finding.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the first row is constructed; the orange tab is the rule the whole sheet is checked against</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Line 1: a budget with a forecast alert.</strong> Pick the account or accounts the data platform runs in. Write a monthly figure you would be uncomfortable to exceed, an actual alert at that figure, and a forecast alert below it so someone hears while there is time to act. Name who receives it; a shared mailbox nobody reads is not an owner.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: line 1 (constructed)</span>Budget:    data platform account, monthly
+Actual:    alert at 100% of the monthly figure
+Forecast:  alert when the forecast passes 80%
+Owner:     platform lead, plus the analytics lead in copy
+Caveat:    data refreshes up to 3 times a day; alerts can lag</div>
+      </div>
+      <div class="step">
+        <p><strong>Line 2: the tag keys you will activate.</strong> Choose three or four keys that answer the questions you will ask of a bad month: which team, which dataset, which environment. Write the date you activated them and a date two days later to check they appear on the billing reports.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: line 2 (constructed)</span>Keys:      team, dataset, env
+Activated: Monday, on the cost allocation tags page
+Check:     Wednesday (up to 24 h to appear + up to 24 h to activate)
+Owner:     platform lead; every new resource gets all three keys</div>
+      </div>
+      <div class="step">
+        <p><strong>Line 3: one layout rule.</strong> Write the rule that would have prevented Part 1's $15,000 month. Base it on how your people actually filter, and include the check that stops it backfiring on whole-month questions.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: line 3 (constructed)</span>Rule:      no dashboard or scheduled query reads raw/ CSV
+Curated:   Parquet, partitioned by the column most questions filter on
+Check:     price one whole-period question too; if partitions make it
+           dearer and it runs often, keep an unpartitioned table for it
+Owner:     analytics lead</div>
+      </div>
+      <div class="step">
+        <p><strong>Line 4: one lifecycle rule.</strong> Pick the prefix that grows fastest and is reread least, usually the raw landing area once it has been converted. Write what happens to it and when, then check the timing against the storage minimums from Part 2.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: line 4 (constructed)</span>Prefix:    raw/ (already converted into curated/)
+Action:    expire after 90 days
+Not:       move to Standard-IA and delete within 30 days (billed 30 anyway)
+Note:      objects under 128 KB are not transitioned by default
+Owner:     data engineering lead; reviewed like a delete permission</div>
+      </div>
+      <div class="step">
+        <p><strong>Line 5: a warehouse idle check.</strong> If you run Redshift Serverless or plan to, write who looks, how often, at whether anything is keeping it busy without users: connection pools held open by a BI tool, many short queries each paying the 60-second minimum, cancelled queries that still billed their time.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: line 5 (constructed)</span>Look at:   usage in hours with no human users (nights, weekends)
+Ask:       which tool held connections open? how many queries were
+           under 60 s? how many were cancelled?
+Action:    close idle pools; batch short scheduled queries together
+Owner:     analytics lead, monthly</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The guardrail plan that arrives with the invoice</span>budget:     "we'll set one up if costs get high"
+tags:       added to resources, never activated
+layout:     whatever the proof of concept used
+lifecycle:  "storage is cheap, keep everything"
+warehouse:  nobody owns the overnight hours</div>
+
+    <div class="callout tip">
+      <p><strong>Price the question, then ask who hears first.</strong> For every estimate, ask two things: how many bytes does the most frequent question read, in the layout it will actually use, and who receives the forecast alert if that number is wrong. If either answer is "we'll see", the plan is not finished. Bring the sheet to session 6: it becomes the cost row on the one-page platform.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 6</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Find your most frequent question.</strong> Ask for the query or dashboard that runs most often against the lake, how often it runs, and how many bytes one run scans. Multiply by $5.00 per TB and the runs a month (us-east-1, AWS Price List, 3 October 2026; re-verify), and compare with what you assumed.</li>
+      <li><strong>Check whether your tags are active.</strong> Ask whoever manages billing whether your cost allocation tag keys are activated, not just applied. If they are not, activating them is the cheapest guardrail on the sheet.</li>
+      <li><strong>Find the existing budget.</strong> Find out whether a budget exists for your data platform's account, who receives its alerts, and whether it has a forecast alert or only an actual one.</li>
+      <li><strong>Finish the five lines with an owner each.</strong> Fill the sheet with the people who would own each line, and bring it: session 6 puts it on the one-page platform next to storage, catalog, engines and identity.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 5 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · A proof of concept on 10 MB of data showed raw CSV and partitioned Parquet costing exactly the same per Athena query. Why?</p>
+      <button class="qopt" type="button">A · Athena does not charge for CSV files</button>
+      <button class="qopt" type="button">B · Athena bills a 10 MB minimum per query, so at that size every layout pays the minimum, $0.000048 a query, and the layout difference only appears as the data grows</button>
+      <button class="qopt" type="button">C · Partitioning has no effect on what Athena reads</button>
+      <button class="qopt" type="button">D · The proof of concept used a different Region</button>
+      <p class="qwhy">Athena bills bytes scanned "rounded up to the nearest megabyte, with a 10 MB minimum per query". Scaled to a terabyte asked 100 times a day, the same one-week question costs $15,000 a month on CSV and $88 partitioned (modelled; us-east-1, AWS Price List, 3 October 2026).</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Every resource in the data account carries a "team" tag, yet the cost reports show no team breakdown. What is the most likely reason?</p>
+      <button class="qopt" type="button">A · Tags only work on S3, not on Athena or Redshift</button>
+      <button class="qopt" type="button">B · Budgets must be deleted and recreated to pick up tags</button>
+      <button class="qopt" type="button">C · Cost reports never show tags</button>
+      <button class="qopt" type="button">D · The tag key was never activated as a cost allocation tag; tags must be activated to appear on billing reports, which can take up to 24 hours to appear plus up to 24 hours to activate</button>
+      <p class="qwhy">"For tags to appear on your billing reports, you must activate them." Applying a tag to a resource is half the job. Activate the keys when the platform is built, because the delay is up to two days.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">3 · Partitioning by day cut a one-week question from $1,130 to $88 a month, but a whole-month question went from $293 to $566. Why did partitioning make it dearer?</p>
+      <button class="qopt" type="button">A · Athena charges extra per partition</button>
+      <button class="qopt" type="button">B · Partitioned data is stored as CSV</button>
+      <button class="qopt" type="button">C · A whole-month question opens all 31 daily files, and each small file carries its own overhead, so it reads more bytes than one larger file; at real scale the gap is smaller than linear scaling suggests</button>
+      <button class="qopt" type="button">D · The whole-month question returned different answers</button>
+      <p class="qwhy">Partitioning pays when questions name a narrow slice of the key, and costs when they span it all. The answers were identical on every layout. Figures modelled from measured bytes; us-east-1, AWS Price List, 3 October 2026; re-verify.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Athena: $5.00 per TB, rounded to the megabyte, 10 MB minimum, cancelled queries billed, failed queries and DDL free, "up to 90%"</span><span class="note">Athena pricing page, read 2026-10-03; AWS Price List bulk API, us-east-1 AmazonAthena offer, retrieved 2026-10-03; re-verify before relying on it</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Small files, partitioning, bytes billed before decompression; 128 MB is a row group default, not a file target</span><span class="note">Amazon Athena User Guide, "Partitioning data", "Columnar storage formats", "Optimize data", read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">$15,000, $1,130, $88; $293 against $566; $3,547; $0.000048 at sample size</span><span class="note">Bytes measured on the 100,000-row NYC TLC sample in analyst session 4; scaling to 1,024 GB and 100 queries a day modelled in analyst session 8</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Redshift Serverless: 60-second minimum, open connection pools, cancelled queries; $0.0500 against $0.0042</span><span class="note">Amazon Redshift Management Guide, "Billing for Amazon Redshift Serverless"; the 8 RPU figure modelled in analyst session 6 at Price List rates</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Standard-IA 30-day and 128 KB minimums; Intelligent-Tiering $0.0025 per 1,000 objects; lifecycle early-transition charge; data transfer in free, 100 GB out free</span><span class="note">Amazon S3 User Guide, "Understanding and managing Amazon S3 storage classes", "Managing the lifecycle of objects"; S3 pricing page, read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">AWS Budgets: actual and forecast alerts, up to three updates a day, notifications can lag; cost allocation tags must be activated, up to 24 h plus 24 h</span><span class="note">AWS Cost Management User Guide, AWS Budgets; AWS Billing User Guide, activating cost allocation tags; read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Lifecycle to expire data automatically, BP 13.1</span><span class="note">AWS Well-Architected Data Analytics Lens (December 22, 2023)</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The per-gigabyte data transfer out rate; Savings Plans and Reserved Instances; network design</span><span class="note">Named, not quoted: no rate was verified for these pages. Read the S3 pricing page before pricing outbound transfer</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The BI tool on the raw folder, the cheaper class that cost more, the weekend nobody could attribute; the five-line plan</span><span class="note">Constructed composites of common patterns, not specific incidents</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 5 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Layout sets the price</b><span>One-week question, a month at 100 a day: CSV $15,000, Parquet $1,130, partitioned $88 (modelled; us-east-1 list prices, 3 Oct 2026).</span></div>
+      <div class="cheat-item"><b>Partitions are a bet</b><span>They win on narrow filters and lose on whole-period questions: $566 against $293 for the whole month.</span></div>
+      <div class="cheat-item"><b>Minimums hide things</b><span>Athena 10 MB per query. Redshift Serverless 60 seconds. Standard-IA 30 days and 128 KB.</span></div>
+      <div class="cheat-item"><b>Quiet line items</b><span>Small files, open connection pools, cancelled queries, the Intelligent-Tiering fee, transfer out past 100 GB.</span></div>
+      <div class="cheat-item"><b>Forecast beats actual</b><span>Budgets alerts on both; data updates up to three times a day and notifications can lag.</span></div>
+      <div class="cheat-item"><b>Activate tags early</b><span>Applied is not active. Up to 24 h to appear, up to 24 h to activate.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>A data platform on one page. The capstone puts every sheet from the leader track onto one drawing: S3 zones, the Glue catalog, Athena and Redshift, Lambda ingest, IAM roles, tonight's guardrails and Bedrock for AI work. Then the six questions to ask of any AWS data proposal, and a straight answer on how much to trust a Well-Architected Lens last updated in December 2023.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 5 of 6 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="a4-compute-or-serverless.html">← Prev: Compute or serverless</a> &nbsp;·&nbsp; <a href="a6-a-data-platform-on-one-page.html">Next: A data platform on one page →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

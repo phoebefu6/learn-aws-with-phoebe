@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 1 of 6. What AWS actually is to a data team: Regions and Availability Zones, who secures what, the handful of services a data platform is built from, and the four meters every bill runs on.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="What AWS is to a data team - learn aws with phoebe">
+<meta property="og:description" content="Leader session 1 of 6. Storing a terabyte in S3 costs $23.55 a month. Scanning it as CSV 100 times a day costs $15,000. The difference is the whole job.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/a1-what-aws-is-to-a-data-team.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="What AWS is to a data team - learn aws with phoebe">
+<meta name="twitter:description" content="Leader session 1 of 6. Regions, shared responsibility, the data services, and the four meters.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 1 · What AWS is to a data team - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Leader session 1 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Leader track · Session 1 of 6</div>
+    <h1>What AWS is to a <span class="accent">data team</span></h1>
+    <p class="sub">AWS lists hundreds of services. A data team lives in about seven of them, and almost every decision a data leader signs off on is one of three questions: where the bytes live, who may touch them, and which meter is running while somebody reads them. Tonight we draw the map: what a Region is, which half of security is yours, the few services a data platform is built from, and the four meters that make up every bill.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Foundations</span>
+      <span class="chip audience">Data and AI leaders, managers, architects</span>
+      <span class="chip audience">No code, no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Regions, the services, the meters</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: your stack on one map</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Most AWS introductions start with the console and a list of icons. A data leader needs a different starting point: AWS is a place where storage and compute are rented separately, each by its own meter, behind one identity system that says no by default. Once that sentence is clear, the rest of the six leader sessions are details of it: S3 as the lake, IAM as the gate, compute versus serverless, the bill, and the one-page platform. The eight analyst sessions build the same pieces in Python on a laptop, against a local mock of the AWS API, on 100,000 real New York taxi trips.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A one-page map of your team's current data stack placed onto the AWS building blocks, with each box tagged by the meter it runs on, and one sentence to repeat in every cloud budget meeting: storing a terabyte in S3 Standard costs $23.55 a month; reading it as CSV a hundred times a day through Athena costs $15,000.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers Regions, Availability Zones and shared responsibility</span>
+      <h2>Where your bytes physically are</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">AWS describes its cloud as 124 Availability Zones within 39 Regions, with more announced. A Region is "a physical location in the world where we have multiple Availability Zones", and each Availability Zone is one or more separate data centres with their own power and networking. For a data team the practical meaning is short: you choose a Region, your data stays in it unless you move it, and most storage is copied across several Availability Zones inside it without you asking.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One AWS Region, us-east-1, drawn as a large outline holding three Availability Zones, each a box with two small data centre blocks. An object written to S3 Standard is drawn as three copies, one in each zone. An object in S3 One Zone-IA sits in only one zone and is marked as lost if that zone is lost. Below, a horizontal line splits responsibility: AWS secures the buildings, hardware and service software; the customer secures the data, who can access it, and how it is configured.">
+        <defs>
+          <filter id="a1aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a1aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a1aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a1aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a1aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a1aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a1aB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a1aW { font: 800 11px Inter, sans-serif; fill: #FFFFFF; }
+          .a1aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+          .a1aR { font: 800 11px Inter, sans-serif; fill: #991B1B; }
+        </style>
+
+        <text class="a1aH" x="30" y="26">ONE REGION, THREE AVAILABILITY ZONES, ONE OBJECT</text>
+
+        <g filter="url(#a1aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="820" height="176" rx="16" transform="rotate(-0.3 440 128)" fill="#FFFFFF"/>
+          <rect x="56" y="70" width="230" height="130" rx="10" transform="rotate(0.5 171 135)" fill="#EEF1FA"/>
+          <rect x="324" y="70" width="230" height="130" rx="10" transform="rotate(-0.5 439 135)" fill="#EEF1FA"/>
+          <rect x="592" y="70" width="230" height="130" rx="10" transform="rotate(0.4 707 135)" fill="#EEF1FA"/>
+          <rect x="72" y="104" width="44" height="30" rx="3" fill="url(#a1aHc)"/>
+          <rect x="124" y="104" width="44" height="30" rx="3" fill="url(#a1aHc)"/>
+          <rect x="340" y="104" width="44" height="30" rx="3" fill="url(#a1aHc)"/>
+          <rect x="392" y="104" width="44" height="30" rx="3" fill="url(#a1aHc)"/>
+          <rect x="608" y="104" width="44" height="30" rx="3" fill="url(#a1aHc)"/>
+          <rect x="660" y="104" width="44" height="30" rx="3" fill="url(#a1aHc)"/>
+          <rect x="190" y="150" width="78" height="26" rx="6" fill="#183177" stroke="#183177"/>
+          <rect x="458" y="150" width="78" height="26" rx="6" fill="#183177" stroke="#183177"/>
+          <rect x="726" y="150" width="78" height="26" rx="6" fill="#183177" stroke="#183177"/>
+          <rect x="190" y="104" width="78" height="26" rx="6" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M40 262 L840 262" stroke-dasharray="7 5"/>
+        </g>
+
+        <text class="a1aL" x="44" y="62">us-east-1 (N. Virginia)</text>
+        <text class="a1aS" x="210" y="62">one of 39 Regions; you choose it</text>
+        <text class="a1aL" x="72" y="92">AZ a</text>
+        <text class="a1aL" x="340" y="92">AZ b</text>
+        <text class="a1aL" x="608" y="92">AZ c</text>
+        <text class="a1aS" x="72" y="150">data centres</text>
+        <text class="a1aW" x="200" y="167">copy 1</text>
+        <text class="a1aW" x="468" y="167">copy 2</text>
+        <text class="a1aW" x="736" y="167">copy 3</text>
+        <text class="a1aB" x="198" y="121">One Zone</text>
+        <text class="a1aR" x="72" y="192">One Zone-IA: lost with its AZ</text>
+        <text class="a1aS" x="340" y="192">S3 Standard: a copy in at least 3 AZs</text>
+
+        <text class="a1aH" x="40" y="250">AWS SECURES: buildings, hardware, the service software</text>
+        <text class="a1aH" x="40" y="284">YOU SECURE: your data, who can reach it, how it is configured</text>
+        <text class="a1aS" x="560" y="250">security "of" the cloud</text>
+        <text class="a1aS" x="560" y="284">security "in" the cloud</text>
+
+        <text class="a1aN" x="30" y="322">Every public data leak in the news sits below the dashed line: a configuration somebody on the customer side chose.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange box is the one storage choice that trades the three copies away for a lower price</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Region first, then everything else<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A Region is the first decision and the stickiest. Prices differ by Region, some services and models arrive in some Regions first, and data residency rules are usually written in terms of countries, which map onto Regions. Every price on these pages is quoted for one Region, us-east-1 in Northern Virginia, from the AWS Price List on 3 October 2026, and every page says so, because the same service can cost a different amount next door.</p>
+        <p>Inside a Region, S3 Standard and the other default storage classes are designed to survive the loss of a whole Availability Zone. Two classes are not: One Zone-IA and Express One Zone keep data in one zone. AWS's own wording is that One Zone-IA data "is not resilient to the physical loss of the Availability Zone". That is a fine trade for a copy you could rebuild, and a poor one for the only copy of anything.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The half of security that is yours<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>AWS calls it the shared responsibility model: AWS is responsible for security "of" the cloud, and the customer for security "in" the cloud. AWS adds that the customer's share "will be determined by the AWS Cloud services that a customer selects". A managed service such as Athena takes more off your plate than a virtual machine you patch yourself, but no service takes away the two things that cause most incidents: who has access, and how the data is configured. That is why session 3 is about IAM and not about encryption algorithms.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The bucket that was "on AWS, so it was secure".</strong> A pattern repeated in public incident reports for a decade: a team assumes the provider handles security, a bucket policy is loosened for a quick share, and the data is readable from the internet. Nothing in AWS's half failed. The configuration sat in the customer's half, and nobody owned it. The fix is organisational before it is technical: a named owner for each bucket and a default that says no.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the services a data platform is built from</span>
+      <h2>Storage, catalog, engines, a gate</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Strip a modern AWS data platform down and four kinds of thing remain. Storage that is cheap and nearly unlimited (S3). A catalog that says what the files mean (the Glue Data Catalog). Engines that read the files when someone asks a question (Athena, Redshift, Lambda, and for AI work, Bedrock). And one identity system around all of it that decides who may do what (IAM). The Well-Architected Data Analytics Lens puts the core idea in one line: "Decoupling storage from compute allows you to manage the cost of storage and compute separately".</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A layered drawing of an AWS data platform. At the bottom, a long hachured bar labelled S3 holds the files, raw and curated. Above it a thinner bar is the Glue Data Catalog, holding table names, schemas and partition locations. Above that, four engine boxes read the same files through the catalog: Athena billed per byte scanned, Redshift Serverless billed per RPU-hour, Lambda billed per GB-second, and Bedrock billed per token. A dashed ring around everything is IAM, which every request passes through. Arrows show each engine reaching down to the same storage.">
+        <defs>
+          <filter id="a1bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="23" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a1bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a1bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a1bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a1bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a1bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a1bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a1bA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a1bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#a1bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="24" y="30" width="832" height="290" rx="22" stroke="#183177" stroke-dasharray="8 6"/>
+          <rect x="60" y="56" width="170" height="64" rx="10" transform="rotate(-0.8 145 88)" fill="#FFFFFF"/>
+          <rect x="250" y="56" width="180" height="64" rx="10" transform="rotate(0.6 340 88)" fill="#FFFFFF"/>
+          <rect x="450" y="56" width="170" height="64" rx="10" transform="rotate(-0.5 535 88)" fill="#FFFFFF"/>
+          <rect x="640" y="56" width="180" height="64" rx="10" transform="rotate(0.7 730 88)" fill="#FFFFFF"/>
+          <rect x="60" y="164" width="760" height="40" rx="8" transform="rotate(0.2 440 184)" fill="#EEF1FA"/>
+          <rect x="60" y="232" width="760" height="58" rx="8" transform="rotate(-0.2 440 261)" fill="url(#a1bHc)"/>
+          <path d="M145 124 L145 158 M340 124 L340 158 M535 124 L535 158 M730 124 L730 158"/>
+          <path d="M145 208 L145 226" marker-end="url(#a1bAr)"/>
+          <path d="M340 208 L340 226" marker-end="url(#a1bAr)"/>
+          <path d="M535 208 L535 226" marker-end="url(#a1bAr)"/>
+          <path d="M730 208 L730 226" marker-end="url(#a1bAr)"/>
+        </g>
+
+        <text class="a1bA" x="40" y="48">IAM: every request passes the gate</text>
+        <text class="a1bL" x="76" y="82">Athena</text>
+        <text class="a1bB" x="76" y="102">per byte scanned</text>
+        <text class="a1bL" x="266" y="82">Redshift Serverless</text>
+        <text class="a1bB" x="266" y="102">per RPU-hour</text>
+        <text class="a1bL" x="466" y="82">Lambda</text>
+        <text class="a1bB" x="466" y="102">per GB-second</text>
+        <text class="a1bL" x="656" y="82">Bedrock</text>
+        <text class="a1bB" x="656" y="102">per token</text>
+        <text class="a1bH" x="76" y="189">GLUE DATA CATALOG</text>
+        <text class="a1bS" x="250" y="189">table names, schemas, where each partition lives</text>
+        <text class="a1bH" x="76" y="258">S3</text>
+        <text class="a1bS" x="110" y="258">the files themselves: raw/ as it arrived, curated/ as Parquet</text>
+        <text class="a1bB" x="76" y="279">per GB-month stored</text>
+
+        <text class="a1bN" x="30" y="346">Four engines, one copy of the bytes: you can switch the engine without moving the data, and pay each meter separately.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange labels are the meters; session 4 is entirely about choosing between them</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Seven services, one sentence each<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>S3</strong> stores objects, files with a key, in buckets. It is the lake. <strong>IAM</strong> holds users, roles and the JSON policies that say what they may do; anything not allowed is denied. <strong>Glue Data Catalog</strong> is "a centralized repository that stores metadata about your organization's data sets": table names, columns, and where the files are. <strong>Athena</strong> runs SQL straight on the files in S3 and bills by the bytes it reads. <strong>Redshift Serverless</strong> is the warehouse, billed by capacity per second while queries run. <strong>Lambda</strong> runs a function for up to 15 minutes when something happens, such as a file landing. <strong>Bedrock</strong> is managed access to foundation models, billed per token.</p>
+        <p>Everything else a data team meets, from EMR to Kinesis to SageMaker, is either a bigger engine, a stream, or a machine-learning workbench on the same storage. Streams have their own course, <a href="https://phoebefu6.github.io/learn-streaming-data-with-phoebe/">streaming data</a>, and model tooling lives in <a href="https://phoebefu6.github.io/learn-dataops-with-phoebe/">DataOps</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why decoupling is the whole architecture<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>In an on-premises warehouse, storage and compute were bought together: more data meant a bigger machine. On AWS the files sit in S3 and any engine that is allowed can read them, so a team can query with Athena on Monday, load the same files into Redshift on Tuesday, and point a Lambda function at them on Wednesday, without copying anything. The price of that freedom is that each engine bills by its own meter, and a careless layout makes the reading meter run fast. The Analytics Lens was last updated on 22 December 2023, so treat it as a sound statement of principles rather than a current product list.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers the four meters and the Free plan</span>
+      <h2>Every bill runs on four meters</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">A data leader does not need to memorise prices. They need to know which meter a decision turns on. Bytes stored, per GB-month. Bytes read, per terabyte scanned. Time, per GB-second or RPU-hour or vCPU-hour. Requests, per thousand or per million. Most surprises in a data platform bill come from the second and third, because they scale with how people work rather than with how much data there is.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Four hand-drawn meters side by side with the unit each one counts. Bytes stored, S3 Standard at 0.023 dollars per GB-month. Bytes scanned, Athena at 5 dollars per TB. Time, Lambda at 0.0000166667 dollars per GB-second and Redshift Serverless at 0.375 dollars per RPU-hour. Requests, S3 PUT at 0.005 dollars per thousand. Below, two bars compare one terabyte stored in S3 Standard for a month, 23.55 dollars, with the same terabyte scanned as CSV 100 times a day for a month, 15,000 dollars.">
+        <defs>
+          <filter id="a1cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="37" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a1cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+        </defs>
+        <style>
+          .a1cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a1cL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a1cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a1cB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a1cV { font: 800 17px Inter, sans-serif; fill: #0E1F52; }
+          .a1cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a1cH" x="30" y="26">THE FOUR METERS, US-EAST-1, PRICE LIST OF 3 OCTOBER 2026</text>
+
+        <g filter="url(#a1cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="120" cy="96" r="44" fill="#FFFFFF"/>
+          <circle cx="330" cy="96" r="44" fill="#FF9900" stroke="#5C3300"/>
+          <circle cx="540" cy="96" r="44" fill="#FFFFFF"/>
+          <circle cx="750" cy="96" r="44" fill="#FFFFFF"/>
+          <path d="M120 96 L146 74"/>
+          <path d="M330 96 L364 92"/>
+          <path d="M540 96 L560 64"/>
+          <path d="M750 96 L726 70"/>
+          <rect x="40" y="216" width="6" height="26" fill="#183177" stroke="#183177"/>
+          <rect x="40" y="252" width="760" height="26" rx="4" fill="url(#a1cHc)"/>
+        </g>
+
+        <text class="a1cL" x="120" y="162" text-anchor="middle">Bytes stored</text>
+        <text class="a1cS" x="120" y="178" text-anchor="middle">S3 Standard $0.023 / GB-mo</text>
+        <text class="a1cL" x="330" y="162" text-anchor="middle">Bytes scanned</text>
+        <text class="a1cB" x="330" y="178" text-anchor="middle">Athena $5.00 / TB</text>
+        <text class="a1cL" x="540" y="162" text-anchor="middle">Time</text>
+        <text class="a1cS" x="540" y="178" text-anchor="middle">Lambda per GB-s, Redshift per RPU-hr</text>
+        <text class="a1cL" x="750" y="162" text-anchor="middle">Requests</text>
+        <text class="a1cS" x="750" y="178" text-anchor="middle">S3 PUT $0.005 / 1,000</text>
+
+        <text class="a1cS" x="56" y="234">one terabyte stored a month</text>
+        <text class="a1cV" x="236" y="236">$23.55</text>
+        <text class="a1cS" x="56" y="270">the same terabyte, as CSV, scanned 100 times a day for a month</text>
+        <text class="a1cV" x="690" y="271">$15,000</text>
+
+        <text class="a1cN" x="30" y="296">Storage is the cheap meter. The reading meter is where layout decisions turn into money, every day.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange meter is the one session 5 and the analyst bench are built around</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Where the two numbers come from<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>$23.55 is 1,024 GB at S3 Standard's first-tier price of $0.023 per GB-month. $15,000 is the same 1,024 GB read in full by Athena, at $5.00 per terabyte scanned, 100 times a day for 30 days. Both prices come from the AWS Price List for us-east-1, read on 3 October 2026. The second number is not a forecast for your team; it is what a common habit costs: raw CSV, no partitions, and a dashboard that reruns the whole table every few minutes. A CSV file is read whole, so even a question about a single week costs the full scan. Ask that one-week question, trips per pickup zone, of the same data stored as Parquet partitioned by day and it costs $88 a month. Analyst session 8 lets you change every part of the sentence and watch the number move.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The Free plan, as it stands today<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>AWS changed its Free Tier for new accounts. Today a new account gets $100 in credits at once and can earn up to $100 more, "up to $200 over 6 months", and AWS says "You won't be charged unless you convert to a Paid plan". The account "closes on its own 6 months after you open it or when your credits run out". On the card question AWS's FAQ says "A payment method isn't required to sign up for most new customers", and also that in some cases it may ask for one to verify identity. Nothing in the leader track needs an account. The analyst track runs on a laptop and offers a real-account path on each page as an option, never a requirement. Terms like these change: re-check the page before you plan a workshop around them.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The proof of concept that cost more than the production plan.</strong> A team prices its new lake by storage, a few terabytes at cents per gigabyte, and the estimate looks tiny. In the first month the bill is many times larger, because analysts point a BI tool at raw CSV through Athena and every dashboard refresh reads every byte. Nobody did anything wrong by the storage estimate. The estimate measured the cheap meter. The scenario is constructed; the two prices are real.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Your stack, on one AWS map</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No console and no account. A sheet of paper, the four layers from Part 2 and the four meters from Part 3. You place every tool your data team uses today onto the map, then mark which meter each one would run on if it moved to AWS. Session 6 turns this sheet into the one-page platform.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A hand-drawn worksheet with four rows, one per layer: storage, catalog, engines, identity. Columns are: what you use today, the AWS building block, the meter it runs on, and who owns it. One row is filled as an example: engines, today a BI tool on a SQL warehouse, on AWS Athena or Redshift Serverless, meter bytes scanned or RPU-hours, owner the analytics lead. An orange tab at the bottom asks which row has no owner.">
+        <defs>
+          <filter id="a1dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="41" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .a1dH { font: 800 11px Inter, sans-serif; fill: #232F3E; letter-spacing: .04em; }
+          .a1dL { font: 600 11px Inter, sans-serif; fill: #232F3E; }
+          .a1dS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a1dB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a1dN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#a1dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="24" width="820" height="176" rx="8" transform="rotate(-0.3 440 112)" fill="#FFFFFF"/>
+          <path d="M30 56 L850 56"/>
+          <path d="M150 24 L150 200 M360 24 L360 200 M560 24 L560 200 M720 24 L720 200" stroke="#C5CCD8"/>
+          <path d="M40 92 L840 92 M40 128 L840 128 M40 164 L840 164" stroke="#E3E7EE"/>
+          <rect x="36" y="134" width="808" height="26" rx="4" fill="#EEF1FA" stroke="#EEF1FA"/>
+          <rect x="30" y="212" width="250" height="28" rx="6" transform="rotate(0.8 155 226)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a1dH" x="44" y="45">LAYER</text>
+        <text class="a1dH" x="162" y="45">TODAY</text>
+        <text class="a1dH" x="372" y="45">AWS BLOCK</text>
+        <text class="a1dH" x="572" y="45">METER</text>
+        <text class="a1dH" x="732" y="45">OWNER</text>
+        <text class="a1dL" x="44" y="79">Storage</text>
+        <text class="a1dL" x="44" y="115">Catalog</text>
+        <text class="a1dL" x="44" y="151">Engines</text>
+        <text class="a1dS" x="162" y="151">BI tool on a SQL warehouse</text>
+        <text class="a1dS" x="372" y="151">Athena or Redshift Serverless</text>
+        <text class="a1dS" x="572" y="151">TB scanned or RPU-hr</text>
+        <text class="a1dS" x="732" y="151">analytics lead</text>
+        <text class="a1dL" x="44" y="187">Identity</text>
+        <text class="a1dB" x="44" y="231">Which row has no owner?</text>
+
+        <text class="a1dN" x="300" y="231">Four rows, five columns. The empty owner cell is the finding.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the example row is constructed; the five columns are the part to copy</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>List what your team uses today, by layer.</strong> Where the files or tables live, what describes them, what runs queries and jobs, and how people get access. Write tool names, not aspirations. If one tool spans two layers, as most warehouses do, write it in both: that is exactly the coupling AWS separates.</p>
+      </div>
+      <div class="step">
+        <p><strong>Put an AWS building block next to each.</strong> Use only the seven services from Part 2. If nothing fits, write "not covered" rather than forcing a match; streaming and machine-learning workbenches have their own courses.</p>
+        <div class="prompt-box good"><span class="label">★ A finished row, in words</span>Layer:     Engines
+Today:     BI dashboards on a SQL warehouse, refreshed every 15 minutes
+AWS block: Athena on S3 for ad hoc, Redshift Serverless for the dashboards
+Meter:     Athena = bytes scanned; Redshift = RPU-hours while queries run
+Owner:     analytics lead (dashboards), data platform lead (warehouse)</div>
+      </div>
+      <div class="step">
+        <p><strong>Tag each block with its meter.</strong> Bytes stored, bytes scanned, time, or requests. Circle any row where the meter scales with how often people click rather than how much data exists: those rows are next month's surprise.</p>
+      </div>
+      <div class="step">
+        <p><strong>Name an owner for every row.</strong> The person who answers when the meter jumps or the access is wrong. An empty owner cell is the most useful thing on the sheet, because it points at the half of shared responsibility nobody has picked up.</p>
+      </div>
+      <div class="step">
+        <p><strong>Write the one sentence.</strong> In your own numbers or in the course's: what it costs to store your largest table for a month, and what it would cost to scan it the way your dashboards do today. Session 5 checks your sentence against a real bill.</p>
+        <div class="prompt-box good"><span class="label">★ The sentence, with the course's numbers</span>Storing 1 TB in S3 Standard: $23.55 a month.
+Scanning that 1 TB as CSV, 100 times a day, through Athena: $15,000 a month.
+A one-week question on partitioned Parquet: $88 a month.
+(us-east-1, AWS Price List, 3 October 2026)</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The map that becomes a migration plan nobody can price</span>move everything to AWS
+use S3 for storage and figure out the rest later
+security is handled by the cloud provider</div>
+
+    <div class="callout tip">
+      <p><strong>Price the reading, not the storing.</strong> When someone brings an AWS estimate, the first question is not "how many terabytes?" but "how many times a day is each terabyte read, by what, in what format?". That one question moves the conversation from the cheap meter to the one that decides the bill.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 2</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Find out which Region your company's AWS work runs in,</strong> or would run in, and why. If the answer is "the default", note who could tell you whether a residency rule applies.</li>
+      <li><strong>Count the copies.</strong> For your most important dataset, find whether it lives in a storage class designed to survive the loss of an Availability Zone. If anyone uses One Zone storage, check that it is a copy you could rebuild.</li>
+      <li><strong>Find the reading meter.</strong> Pick one dashboard and ask how often it refreshes and how much data each refresh reads. Multiply. You now have the number session 5 starts from.</li>
+      <li><strong>Bring the one-page map.</strong> Session 2 fills in the storage row properly: buckets, prefixes, classes and lifecycle.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 1 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · A bucket in your account is readable from the internet because of a policy a colleague changed. Under the shared responsibility model, whose half is that in?</p>
+      <button class="qopt" type="button">A · AWS's, because S3 is a managed service</button>
+      <button class="qopt" type="button">B · Nobody's; it is a shared grey area</button>
+      <button class="qopt" type="button">C · The customer's: AWS secures the cloud itself, the customer secures what is configured in it, including who can reach the data</button>
+      <button class="qopt" type="button">D · AWS's, because the default should have prevented it</button>
+      <p class="qwhy">AWS secures the buildings, hardware and service software, security "of" the cloud. Access policies are configuration, security "in" the cloud, and they are the customer's to own.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">2 · Why can a team query the same S3 files with Athena today and Redshift Serverless tomorrow without copying them?</p>
+      <button class="qopt" type="button">A · Because Athena and Redshift are the same engine</button>
+      <button class="qopt" type="button">B · Because storage and compute are decoupled: the files sit in S3, the catalog says what they mean, and any permitted engine can read them, each billed by its own meter</button>
+      <button class="qopt" type="button">C · Because S3 automatically converts files for each engine</button>
+      <button class="qopt" type="button">D · It cannot; every engine needs its own copy</button>
+      <p class="qwhy">Decoupling is the architectural idea the Analytics Lens names first. The cost of the freedom is that each engine bills separately, so the reading meter must be managed on purpose.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · A terabyte costs $23.55 a month to store in S3 Standard and $15,000 a month to scan as CSV 100 times a day through Athena. What is the right reading?</p>
+      <button class="qopt" type="button">A · The reading meter, driven by format, layout and how often people query, decides the bill far more than the storage meter</button>
+      <button class="qopt" type="button">B · S3 is overpriced and the data should stay on premises</button>
+      <button class="qopt" type="button">C · Athena should never be used</button>
+      <button class="qopt" type="button">D · The two numbers cannot both be right</button>
+      <p class="qwhy">Both are real us-east-1 prices applied to one terabyte. The gap is the habit, not the service: a one-week question asked of partitioned Parquet costs $88 a month, because only seven daily folders and one column are read.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Regions, Availability Zones, 39 and 124</span><span class="note">AWS Global Infrastructure page and the AWS overview whitepaper, read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Shared responsibility: "of" and "in" the cloud</span><span class="note">AWS shared responsibility model page, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Storage classes that survive an AZ loss, and the two that do not</span><span class="note">Amazon S3 User Guide, storage classes, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Decoupling storage from compute; the Lens dated 22 December 2023</span><span class="note">AWS Well-Architected Data Analytics Lens, BP 11.1, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The four meters and their prices</span><span class="note">AWS Price List bulk API, us-east-1, retrieved 3 October 2026; $23.55 and $15,000 computed from those rows. Re-verify before delivery</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The Free plan: credits, six months, card usually not required</span><span class="note">aws.amazon.com/free and the Free Tier FAQs, read at source; terms change, re-check before a workshop</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The proof of concept and the open bucket stories</span><span class="note">Constructed composites of common patterns, not specific incidents</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 1 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Region first</b><span>Prices, services and residency follow it. Every price here is us-east-1.</span></div>
+      <div class="cheat-item"><b>Your half of security</b><span>Data, access, configuration. AWS secures the cloud; you secure what is in it.</span></div>
+      <div class="cheat-item"><b>Four layers</b><span>S3 storage, Glue catalog, engines (Athena, Redshift, Lambda, Bedrock), IAM around all.</span></div>
+      <div class="cheat-item"><b>Four meters</b><span>Bytes stored, bytes scanned, time, requests.</span></div>
+      <div class="cheat-item"><b>The sentence</b><span>1 TB stored: $23.55 a month. Scanned as CSV 100 times a day: $15,000.</span></div>
+      <div class="cheat-item"><b>One Zone is one copy</b><span>One Zone-IA is lost with its Availability Zone. Use it for rebuildable copies only.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>The storage row of your map gets real. S3 has no folders, only keys; it has nine storage classes with minimum durations that bill you if you leave early; and lifecycle rules can move or delete data on a schedule that no bucket policy can block. Session 2 draws the lake a data team actually needs: raw, curated and archive, and what each one costs.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 1 of 6 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="a2-s3-is-the-lake.html">Next: S3 is the lake →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

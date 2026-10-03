@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 4 of 8. How Athena bills a query, byte by byte: $5.00 per TB scanned, rounded up to the megabyte, 10 MB minimum. Three questions measured against three layouts of 100,000 real taxi trips, with the same answer every time.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Athena: pay per byte scanned - learn aws with phoebe">
+<meta property="og:description" content="Analyst session 4 of 8. Fares on 15 January: 10,095,345 bytes from the CSV, 822,585 from one Parquet file, 8,968 from the partitioned layout. Same answer.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/b4-athena-pay-per-byte.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Athena: pay per byte scanned - learn aws with phoebe">
+<meta name="twitter:description" content="Analyst session 4 of 8. The Athena meter, three layouts on three questions, and how to count the bytes a columnar engine fetches.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 4 · Athena: pay per byte scanned - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Analyst session 4 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Analyst track · Session 4 of 8</div>
+    <h1>Athena: pay per <span class="accent">byte scanned</span></h1>
+    <p class="sub">Athena has no servers to size and no clock to watch. It has one meter: how many bytes a query reads from S3. That makes the layout decisions from session 1 into prices. Tonight we read Athena's billing rules line by line, ask the same three questions of the CSV, the Parquet file and the partitioned copy, and count the bytes each one has to fetch. The answers never change. The byte counts change by a factor of more than a thousand.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Data analysts and engineers</span>
+      <span class="chip audience">Python, runs locally, no AWS account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · The meter, three layouts, the method</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: bytes per question, measured</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 1 wrote the same 100,000 taxi trips three ways into an <code>out/</code> folder. Session 3 told the catalog what those files are: 19 columns, partition key <code>pickup_date</code>, 31 partitions. Tonight we query them the way Athena would, and count what it would bill. Athena itself cannot run on a laptop, so DuckDB stands in to compute the answers, and the byte counts come from the files' own metadata, which is what a columnar engine reads to decide what to fetch. Nothing tonight touches a real account or a real bill.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = run the code yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> The four billing rules you can recite, nine measured byte counts (three questions, three layouts) with the same answer behind every one, and a method you can point at any Parquet table at work: file overhead plus the column chunks a query names is what the engine fetches, and what the engine fetches is what you pay for.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers how Athena bills a query</span>
+      <h2>The meter counts bytes, not seconds</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Athena charges $5.00 per TB scanned (us-east-1, AWS Price List, 3 October 2026; prices change without notice, so re-verify before relying on them). The pricing page states the rule exactly: "You are charged for the number of bytes scanned per query, rounded up to the nearest megabyte, with a 10 MB minimum per query." A slow query and a fast query that read the same bytes cost the same. A query that reads twice the bytes costs twice as much, whatever it returns.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 314" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Five steps from left to right for one query, average tip by payment type on the single Parquet file. Step 1: the file in S3, 2,387,037 bytes on disk. Step 2: the bytes the query reads, 197,417, two columns plus overhead. Step 3: rounded up to 1 megabyte. Step 4, highlighted: the 10 megabyte minimum applies, so 10 megabytes are billed. Step 5: times 5 dollars per terabyte gives 0.000048 dollars. Below, four rules: DDL statements and failed queries are not charged, cancelled queries are billed for data scanned, and compressed data is billed on its compressed bytes.">
+        <defs>
+          <filter id="b4aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="17" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b4aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b4aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b4aH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b4aL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b4aS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b4aB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b4aV { font: 800 17px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #0E1F52; }
+          .b4aW { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #FFFFFF; }
+          .b4aN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b4aH" x="30" y="26">ONE QUERY ON ITS WAY TO A BILL: AVERAGE TIP BY PAYMENT TYPE, ONE PARQUET FILE</text>
+
+        <g filter="url(#b4aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="50" width="136" height="86" rx="8" transform="rotate(-1.2 98 93)" fill="#FFFFFF"/>
+          <rect x="202" y="50" width="136" height="86" rx="8" transform="rotate(0.9 270 93)" fill="#EEF1FA"/>
+          <rect x="374" y="50" width="136" height="86" rx="8" transform="rotate(-0.7 442 93)" fill="#FFFFFF"/>
+          <rect x="546" y="50" width="136" height="86" rx="8" transform="rotate(1.1 614 93)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="718" y="50" width="136" height="86" rx="8" transform="rotate(-0.8 786 93)" fill="#183177" stroke="#183177"/>
+          <path d="M172 93 L196 93" marker-end="url(#b4aAr)"/>
+          <path d="M344 93 L368 93" marker-end="url(#b4aAr)"/>
+          <path d="M516 93 L540 93" marker-end="url(#b4aAr)"/>
+          <path d="M688 93 L712 93" marker-end="url(#b4aAr)"/>
+          <rect x="30" y="206" width="195" height="62" rx="7" transform="rotate(-0.6 127 237)" fill="#FFFFFF"/>
+          <rect x="240" y="206" width="195" height="62" rx="7" transform="rotate(0.5 337 237)" fill="#FFFFFF"/>
+          <rect x="450" y="206" width="195" height="62" rx="7" transform="rotate(-0.4 547 237)" fill="#EEF1FA"/>
+          <rect x="660" y="206" width="195" height="62" rx="7" transform="rotate(0.6 757 237)" fill="#EEF1FA"/>
+        </g>
+
+        <text class="b4aL" x="42" y="74">1 · the file</text>
+        <text class="b4aS" x="42" y="98">trips.parquet</text>
+        <text class="b4aS" x="42" y="118">2,387,037 B on disk</text>
+
+        <text class="b4aL" x="214" y="74">2 · bytes read</text>
+        <text class="b4aV" x="214" y="100">197,417 B</text>
+        <text class="b4aS" x="214" y="120">2 columns + overhead</text>
+
+        <text class="b4aL" x="386" y="74">3 · round up</text>
+        <text class="b4aV" x="386" y="100">1 MB</text>
+        <text class="b4aS" x="386" y="120">to the next MB</text>
+
+        <text class="b4aL" x="558" y="74">4 · 10 MB floor</text>
+        <text class="b4aB" x="558" y="98">max(10 MB, 1 MB)</text>
+        <text class="b4aB" x="558" y="118">= 10 MB billed</text>
+
+        <text class="b4aW" x="730" y="80">5 · x $5.00/TB</text>
+        <text class="b4aW" x="730" y="108">= $0.000048</text>
+
+        <text class="b4aS" x="30" y="164">us-east-1, AWS Price List, 3 October 2026; re-verify before relying on it. The script counts 1 MB as 2^20 bytes.</text>
+
+        <text class="b4aH" x="30" y="194">WHAT THE METER SKIPS, AND WHAT IT STILL COUNTS</text>
+        <text class="b4aL" x="42" y="232">DDL statements</text>
+        <text class="b4aS" x="42" y="252">no charge</text>
+        <text class="b4aL" x="252" y="232">Failed queries</text>
+        <text class="b4aS" x="252" y="252">no charge</text>
+        <text class="b4aL" x="462" y="232">Cancelled queries</text>
+        <text class="b4aS" x="462" y="252">billed for data scanned</text>
+        <text class="b4aL" x="672" y="232">Compressed data</text>
+        <text class="b4aS" x="672" y="252">billed on compressed bytes</text>
+
+        <text class="b4aN" x="30" y="296">The orange step is why every query on the 100,000-row sample costs the same: none of them leaves the floor.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - bytes read, rounded up to the megabyte, lifted to 10 MB, times the price per TB</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Four rules from the pricing page<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Rounding and the floor.</strong> Bytes are "rounded up to the nearest megabyte, with a 10 MB minimum per query". Ten megabytes at $5.00 per TB is $0.000048, the smallest Athena bill there is. <strong>What is free.</strong> "There are no charges for Data Definition Language (DDL) statements like CREATE, ALTER, or DROP TABLE statements for managing partitions, or failed queries." Registering a table costs nothing; a query that errors costs nothing. <strong>What is not.</strong> "Canceled queries are billed for the total amount of data scanned when the query is canceled." Pressing cancel stops the meter; it does not refund it. <strong>Compression.</strong> The Athena tuning guide says "you pay for the number of bytes scanned before decompression", so compressed bytes in S3 are the bytes you pay for, and smaller files are a direct discount.</p>
+        <p>The pricing page puts the combined effect of good layout at "up to 90%" saved per query from "compressing, partitioning, and converting your data into columnar formats". Part 2 measures what that looks like on real data, question by question.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What a megabyte means here<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The build-along script counts a megabyte as 2<sup>20</sup> bytes (1,048,576) and a terabyte as 2<sup>40</sup>. The pricing page says "megabyte" and "TB" without defining either, and these pages could not find a definition at source, so treat the unit as a convention of the script, not a fact about Athena. It matters at exactly one point tonight: the CSV is 10,095,345 bytes, which is under 10 binary megabytes (10,485,760 bytes) and just over 10 decimal ones. Under the script's convention it sits on the floor with everything else. Under the other reading it would round up to 11 MB. Either way the bill is well under a hundredth of a cent, and the comparison between layouts, which is the lesson, does not move.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why "free DDL" is a habit, not a footnote<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Because <code>CREATE TABLE</code> and <code>ALTER TABLE ADD PARTITION</code> cost nothing, the cheap move is always to describe the data properly before querying it: a table over the curated Parquet, partitions registered or projected as in session 3. Querying raw CSV because "the table already exists" is paying a scanning bill to avoid a free statement.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The query someone cancelled after a coffee.</strong> An analyst starts a broad query against the raw zone, sees it is taking a while, gets a coffee, and cancels it on the way back. The query returned nothing, and the next month's line item still shows the bytes it read before the cancel landed. Nothing went wrong; the pricing page says exactly this. The habit that fixes it is to test a query's shape against one partition first. The scenario is constructed; the billing rule is quoted from the Athena pricing page.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers three layouts on three questions</span>
+      <h2>Same answer, very different byte counts</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Three questions, chosen because they pull in different directions. Q2 asks the whole month for two columns. Q3 asks one day for one column. Q4 asks one week for one column. Each is asked of the CSV, the single Parquet file and the copy partitioned by pickup day, and each count below is printed by the build-along script. The CSV has no columns to skip and no folders to prune, so it reads 10,095,345 bytes every time. The other two layouts trade places depending on the question.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 398" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three groups of three horizontal bars, each bar the share of the CSV's 10,095,345 bytes a layout reads. Q2, average tip by payment type for the whole month: CSV 100 percent, one Parquet file 197,417 bytes or 1.96 percent, partitioned 381,251 bytes or 3.78 percent. Q3, fares on 15 January: CSV 100 percent, Parquet 822,585 bytes or 8.15 percent, partitioned 8,968 bytes or 0.09 percent. Q4, pickups per zone 15 to 21 January: CSV 100 percent, Parquet 760,406 bytes or 7.53 percent, partitioned 58,887 bytes or 0.58 percent. Every one of the nine queries is billed 0.000048 dollars because all sit under the 10 megabyte minimum.">
+        <defs>
+          <filter id="b4bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="23" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b4bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b4bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b4bH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b4bL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b4bS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b4bB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b4bA { font: 700 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #183177; }
+          .b4bN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b4bH" x="30" y="26">SHARE OF THE CSV'S BYTES EACH LAYOUT READS (SAMPLE, MEASURED)</text>
+        <text class="b4bA" x="180" y="48">bar = share of the CSV · label = bytes read</text>
+        <text class="b4bA" x="752" y="48">billed per query</text>
+
+        <g filter="url(#b4bSk)" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="180" y="82" width="400" height="14" rx="3" transform="rotate(-0.3 380 89)" fill="url(#b4bHc)"/>
+          <rect x="180" y="104" width="8" height="14" rx="2" fill="#183177" stroke="#183177"/>
+          <rect x="180" y="126" width="15" height="14" rx="2" fill="#FF9900" stroke="#5C3300"/>
+
+          <rect x="180" y="180" width="400" height="14" rx="3" transform="rotate(0.3 380 187)" fill="url(#b4bHc)"/>
+          <rect x="180" y="202" width="33" height="14" rx="2" fill="#183177" stroke="#183177"/>
+          <rect x="180" y="224" width="2" height="14" fill="#FF9900" stroke="#5C3300"/>
+
+          <rect x="180" y="278" width="400" height="14" rx="3" transform="rotate(-0.3 380 285)" fill="url(#b4bHc)"/>
+          <rect x="180" y="300" width="30" height="14" rx="2" fill="#183177" stroke="#183177"/>
+          <rect x="180" y="322" width="3" height="14" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="b4bL" x="30" y="72">Q2 · average tip by payment type, whole month</text>
+        <text class="b4bS" x="30" y="93">CSV</text>
+        <text class="b4bS" x="30" y="115">Parquet, one file</text>
+        <text class="b4bS" x="30" y="137">Partitioned by day</text>
+        <text class="b4bS" x="590" y="93">10,095,345 B · 100%</text>
+        <text class="b4bS" x="198" y="115">197,417 B · 1.96%</text>
+        <text class="b4bS" x="205" y="137">381,251 B · 3.78%</text>
+        <text class="b4bS" x="752" y="93">$0.000048</text>
+        <text class="b4bS" x="752" y="115">$0.000048</text>
+        <text class="b4bS" x="752" y="137">$0.000048</text>
+
+        <text class="b4bL" x="30" y="170">Q3 · fares on 15 January</text>
+        <text class="b4bS" x="30" y="191">CSV</text>
+        <text class="b4bS" x="30" y="213">Parquet, one file</text>
+        <text class="b4bS" x="30" y="235">Partitioned by day</text>
+        <text class="b4bS" x="590" y="191">10,095,345 B · 100%</text>
+        <text class="b4bS" x="223" y="213">822,585 B · 8.15%</text>
+        <text class="b4bB" x="192" y="235">8,968 B · 0.09%</text>
+        <text class="b4bS" x="752" y="191">$0.000048</text>
+        <text class="b4bS" x="752" y="213">$0.000048</text>
+        <text class="b4bS" x="752" y="235">$0.000048</text>
+
+        <text class="b4bL" x="30" y="268">Q4 · pickups per zone, 15-21 January</text>
+        <text class="b4bS" x="30" y="289">CSV</text>
+        <text class="b4bS" x="30" y="311">Parquet, one file</text>
+        <text class="b4bS" x="30" y="333">Partitioned by day</text>
+        <text class="b4bS" x="590" y="289">10,095,345 B · 100%</text>
+        <text class="b4bS" x="220" y="311">760,406 B · 7.53%</text>
+        <text class="b4bB" x="193" y="333">58,887 B · 0.58%</text>
+        <text class="b4bS" x="752" y="289">$0.000048</text>
+        <text class="b4bS" x="752" y="311">$0.000048</text>
+        <text class="b4bS" x="752" y="333">$0.000048</text>
+
+        <text class="b4bB" x="30" y="362">Every row bills $0.000048: all nine queries sit under the 10 MB minimum.</text>
+        <text class="b4bN" x="30" y="384">Partitioned wins on Q3 and Q4 and loses on Q2. At 1 TB of CSV, Q4 partitioned would scan 6.0 GB (scaled).</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - orange is the partitioned layout: smallest when the question filters on the day, larger than one file when it does not</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Why the sample bill is flat, and what it looks like at scale<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>On the sample every query costs $0.000048, because the largest read, the whole CSV, is still under the 10 MB minimum. So the sample proves bytes, not dollars. To see dollars, scale the measured shares to a lake where the CSV is 1,024 GB and the team runs each query 100 times a day. That is a modelled calculation, linear in the measured shares, at $5.00 per TB (us-east-1, AWS Price List, 3 October 2026; re-verify before relying on it):</p>
+        <ul>
+          <li><strong>Q2, whole month, two columns.</strong> CSV $15,000 a month; one Parquet file $293; partitioned $566.</li>
+          <li><strong>Q3, one day, one column.</strong> CSV $15,000; Parquet $1,222; partitioned $13.</li>
+          <li><strong>Q4, one week, one column.</strong> CSV $15,000; Parquet $1,130; partitioned $88. The script prints the scan: 6.0 GB instead of a terabyte.</li>
+        </ul>
+        <p>Scaling linearly overstates the partitioned layout's losses: at a terabyte a day of trips is millions of rows, and 31 footers become a rounding error next to the data. Read the Q2 row as the direction of the effect, not its size. Your numbers will differ with your own data, columns and query mix.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The answers do not change<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Layout is a pricing decision, never a correctness one. On every layout, payment type 1 has an average tip of 4.1507 across 78,236 trips (Q2); 15 January has 2,591 trips with fares of $50,935.89 (Q3); and the busiest pickup zones for 15 to 21 January are 161 with 1,088 pickups, 132 with 1,086 and 237 with 1,085 (Q4). The build-along prints the Q2 answer from the partitioned copy so you can check one yourself. If a layout change ever changes an answer, something other than the layout changed.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where partitioning loses<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Q2 asks every day, so the partitioned layout opens all 31 files, and each file brings its own footer and metadata. It reads 381,251 bytes against 197,417 for the single file: nearly twice as much for the same two columns. Session 1 measured the same effect on a whole-month, every-column read (3,023,334 against 2,387,037). Athena's tuning guide warns about the shape: "Having too many partition keys can result in fragmented datasets with too many files and files that are too small." Partition on the column your expensive questions filter on, and check the questions that do not filter on it before you celebrate.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The dashboard that never asked for a day.</strong> A team partitions its trips table by day because the daily operations report filters on the day, and that report gets cheaper overnight. A finance dashboard on the same table only ever asks month-to-date totals, so it opens every day's file on every refresh and reads more than it did before. Both outcomes are the same mechanism, measured above as Q3 and Q2. The scenario is constructed; your numbers will differ.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers how the bytes are counted, and the limits of a stand-in</span>
+      <h2>Count bytes the way a columnar engine fetches them</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Every Parquet file ends in a footer that lists each column chunk and its compressed size. A columnar engine reads that footer, then fetches only the chunks the query needs; Athena's documentation says "Only the columns needed for the query are loaded". So the bytes a query costs can be counted from the file alone: the file's overhead (its size minus all its column chunks) plus the chunks the query names. DuckDB's <code>parquet_metadata()</code> exposes exactly those numbers. One detail decides Q3 and Q4: a filter is a column too.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 344" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Q3, fares on 15 January, on two layouts. Left: the single Parquet file drawn as 19 column chunks above a footer strip. Two chunks are read: fare_amount, the column the question asks for, and tpep_pickup_datetime, highlighted, because the file must be read to find 15 January. Together with the footer that is 822,585 bytes. Right: the partitioned layout, where the key pickup_date=2024-01-15 answers the filter. One small file is opened and only its fare_amount chunk and footer are read, 8,968 bytes. The other 30 days are never opened.">
+        <defs>
+          <filter id="b4cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="37" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b4cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b4cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b4cH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b4cL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b4cS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b4cB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b4cV { font: 800 18px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #0E1F52; }
+          .b4cN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b4cH" x="30" y="26">Q3, FARES ON 15 JANUARY: WHAT EACH LAYOUT MUST FETCH</text>
+
+        <g filter="url(#b4cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="400" height="264" rx="10" transform="rotate(-0.4 230 172)" fill="#FFFFFF"/>
+          <rect x="50" y="80" width="342" height="110" rx="4" fill="#FFFFFF"/>
+          <path d="M68 82 L68 188 M86 82 L86 188 M104 82 L104 188 M122 82 L122 188 M140 82 L140 188 M158 82 L158 188 M176 82 L176 188 M194 82 L194 188 M212 82 L212 188 M230 82 L230 188 M248 82 L248 188 M266 82 L266 188 M284 82 L284 188 M302 82 L302 188 M320 82 L320 188 M338 82 L338 188 M356 82 L356 188 M374 82 L374 188" stroke="#C5CCD8"/>
+          <rect x="87" y="83" width="16" height="104" rx="2" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="231" y="83" width="16" height="104" rx="2" fill="#183177" stroke="#183177"/>
+          <rect x="50" y="198" width="342" height="22" rx="4" fill="url(#b4cHc)"/>
+
+          <rect x="450" y="40" width="400" height="264" rx="10" transform="rotate(0.4 650 172)" fill="#EEF1FA"/>
+          <rect x="474" y="100" width="168" height="90" rx="4" transform="rotate(-1.5 558 145)" fill="#FFFFFF"/>
+          <path d="M483 104 L483 186 M492 104 L492 186 M501 104 L501 186 M510 104 L510 186 M519 104 L519 186 M528 104 L528 186 M537 104 L537 186 M546 104 L546 186 M555 104 L555 186 M564 104 L564 186 M573 104 L573 186 M582 104 L582 186 M591 104 L591 186 M600 104 L600 186 M609 104 L609 186 M618 104 L618 186 M627 104 L627 186 M636 104 L636 186" stroke="#C5CCD8" transform="rotate(-1.5 558 145)"/>
+          <rect x="556" y="105" width="8" height="80" rx="1" fill="#183177" stroke="#183177" transform="rotate(-1.5 558 145)"/>
+          <rect x="474" y="198" width="168" height="16" rx="3" fill="url(#b4cHc)"/>
+          <rect x="672" y="102" width="34" height="28" rx="3" transform="rotate(2 689 116)" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="716" y="102" width="34" height="28" rx="3" transform="rotate(-2 733 116)" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="760" y="102" width="34" height="28" rx="3" transform="rotate(3 777 116)" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="804" y="102" width="34" height="28" rx="3" transform="rotate(-1 821 116)" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="672" y="140" width="34" height="28" rx="3" transform="rotate(-2 689 154)" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="716" y="140" width="34" height="28" rx="3" transform="rotate(1 733 154)" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="760" y="140" width="34" height="28" rx="3" transform="rotate(-3 777 154)" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <rect x="804" y="140" width="34" height="28" rx="3" transform="rotate(2 821 154)" fill="#FFFFFF" stroke="#C5CCD8"/>
+        </g>
+
+        <text class="b4cL" x="46" y="64">One Parquet file, 19 column chunks</text>
+        <text class="b4cB" x="46" y="244">orange: pickup time, read to find 15 January</text>
+        <text class="b4cS" x="46" y="262">navy: fare_amount · hachure: footer and overhead</text>
+        <text class="b4cV" x="46" y="290">822,585 B</text>
+
+        <text class="b4cL" x="466" y="64">Partitioned: the key answers the filter</text>
+        <text class="b4cS" x="474" y="88">pickup_date=2024-01-15/data_0.parquet</text>
+        <text class="b4cS" x="672" y="190">30 other days:</text>
+        <text class="b4cS" x="672" y="206">never opened</text>
+        <text class="b4cB" x="466" y="244">no time column read: the folder did the filtering</text>
+        <text class="b4cS" x="466" y="262">navy: fare_amount · hachure: this file's footer</text>
+        <text class="b4cV" x="466" y="290">8,968 B</text>
+
+        <text class="b4cN" x="30" y="330">Bytes fetched = file overhead + the column chunks the query needs, both read from parquet_metadata().</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - in a single file the filter column must be fetched; in the partitioned layout the key does the filtering for free</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>A filter is a column you pay for<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Q3 asks only for <code>fare_amount</code>, but to know which rows belong to 15 January, an engine reading the single file must also fetch <code>tpep_pickup_datetime</code>. That is why the script adds the time column to the single-file count whenever the question names days, and why Q3 reads 822,585 bytes there. In the partitioned layout the day is in the key, <code>pickup_date=2024-01-15/</code>, registered as the partition key in session 3. The engine picks the folder, opens one file, and fetches one chunk plus that file's footer: 8,968 bytes. Athena's partitioning page says it directly: "If you query a partitioned table and specify the partition in the WHERE clause, Athena scans the data only from that partition."</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Predicate pushdown, and why our single-file numbers are an upper bound<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Athena's columnar storage page adds a second skip: "Predicate pushdown in Parquet and ORC enables Athena queries to fetch only the blocks it needs, improving query performance." Parquet keeps statistics such as minimum and maximum values per row group, so on a large file sorted by time an engine may skip whole row groups that cannot contain 15 January. Our files are each a single row group, far below the 128 MB row group default the guide mentions, so there is nothing to skip inside them, and the script counts the full chunks. On large production files Athena may read less than this method predicts for a filtered question on one file. Treat the single-file Q3 and Q4 counts as what you pay without that help, and the console as the final word.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why DuckDB is a stand-in, not a meter<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>DuckDB answers the questions so you can see the answers match across layouts. It does not measure what Athena would bill, and the script never asks it to: the byte counts come from file sizes on disk and the column chunk sizes in each footer. That separation is deliberate. A local engine has its own caching and reading strategy; the file's own metadata is the same whichever engine reads it. If you run these queries on a real account, compare each with Athena's "Data scanned" figure; where they differ, the console is the bill. File-format internals (row groups, encodings, statistics) are taught in <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/">learn-ai-infra</a>; here they matter only as bytes.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Ten rows every morning.</strong> An analyst starts each day with <code>SELECT * FROM raw_trips LIMIT 10</code> on the raw CSV table, to "just look at the data". It feels free because it returns ten rows. But Athena bills bytes scanned, not rows returned, and a CSV has no column chunks to skip and no footer to consult: whatever the engine reads to find those rows is what is billed. How far Athena reads before a LIMIT stops it is engine behaviour these pages have not measured, so do not count on LIMIT to make it cheap; check "Data scanned" in the console for your table. The cheaper habit is to preview from the curated Parquet, name the columns, and filter on the partition. The scenario is constructed.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Bytes per question, measured from the files</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">One Python file, about fifty lines, a few seconds to run. It reads the three layouts session 1 wrote, counts the bytes each question needs from each layout, prices each count with Athena's rule, and asks DuckDB for one answer as a check. The output below is pasted from a real run of exactly this code. Predict the cheapest layout for each question before you run it.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 254" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along pipeline. The out folder from session 1 holds trips.csv, trips.parquet and 31 partitioned files. Highlighted, parquet_metadata reads each file's column chunk sizes and, by subtraction, its overhead. scanned adds the overhead and the needed chunks per layout. bill rounds up to the megabyte, applies the 10 megabyte floor and multiplies by 5 dollars per terabyte. Separately, DuckDB computes one answer as a check, never the bytes.">
+        <defs>
+          <filter id="b4dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="41" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b4dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b4dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b4dL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b4dS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b4dB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b4dW { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #FFFFFF; }
+          .b4dN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#b4dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="150" height="110" rx="8" transform="rotate(-1 105 95)" fill="#FFFFFF"/>
+          <rect x="30" y="128" width="150" height="16" rx="3" fill="url(#b4dHc)"/>
+          <rect x="220" y="50" width="170" height="90" rx="8" transform="rotate(0.8 305 95)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="430" y="50" width="170" height="90" rx="8" transform="rotate(-0.6 515 95)" fill="#EEF1FA"/>
+          <rect x="640" y="50" width="210" height="90" rx="8" transform="rotate(0.5 745 95)" fill="#183177" stroke="#183177"/>
+          <rect x="220" y="178" width="380" height="36" rx="6" transform="rotate(-0.3 410 196)" fill="#FFFFFF"/>
+          <path d="M186 95 L212 95" marker-end="url(#b4dAr)"/>
+          <path d="M396 95 L422 95" marker-end="url(#b4dAr)"/>
+          <path d="M606 95 L632 95" marker-end="url(#b4dAr)"/>
+          <path d="M105 156 L105 196 L212 196" marker-end="url(#b4dAr)"/>
+        </g>
+
+        <text class="b4dL" x="44" y="64">out/ from session 1</text>
+        <text class="b4dS" x="44" y="84">trips.csv</text>
+        <text class="b4dS" x="44" y="102">trips.parquet</text>
+        <text class="b4dS" x="44" y="120">partitioned/ x 31</text>
+
+        <text class="b4dL" x="234" y="78">parquet_metadata()</text>
+        <text class="b4dB" x="234" y="100">column chunk sizes</text>
+        <text class="b4dB" x="234" y="120">file size minus chunks</text>
+
+        <text class="b4dL" x="444" y="78">scanned()</text>
+        <text class="b4dS" x="444" y="100">overhead + needed cols</text>
+        <text class="b4dS" x="444" y="120">per layout, per question</text>
+
+        <text class="b4dW" x="654" y="78">bill()</text>
+        <text class="b4dW" x="654" y="100">ceil to MB, 10 MB floor</text>
+        <text class="b4dW" x="654" y="122">x $5.00 per TB</text>
+
+        <text class="b4dL" x="234" y="201">DuckDB checks the answer, never the bytes</text>
+
+        <text class="b4dN" x="30" y="242">The bytes come from the files' own metadata; the price comes from Athena's rule. No engine meters anything.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange step is the measurement: what a columnar engine would fetch, read from the file itself</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Reuse the environment and the <code>out/</code> folder from analyst session 1.</strong> Same folder, same <code>.venv</code>, same pinned versions; nothing new to install. This script reads <code>out/trips.csv</code>, <code>out/trips.parquet</code> and <code>out/partitioned/</code>. If they are missing, run analyst session 1's script first.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · setup (verified 3 October 2026)</span>. .venv/bin/activate
+python -c "import duckdb; print(duckdb.__version__)"   # expect 1.5.6
+ls out/trips.csv out/trips.parquet &amp;&amp; ls out/partitioned | wc -l   # expect 31</div>
+      </div>
+      <div class="step">
+        <p><strong>Two measuring helpers.</strong> <code>file_overhead</code> is the file's size minus all its column chunks: footer, schema, headers. <code>col_bytes</code> sums the compressed chunks of the columns a query names. Both read only the footer, never the data.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · b4_athena.py, part 1</span># Analyst session 4 - Athena bills bytes scanned. DuckDB stands in for the engine; the bytes are the files'.
+import math, os
+import duckdb
+
+MB, TB, USD_PER_TB = 2 ** 20, 2 ** 40, 5.00        # us-east-1, AWS Price List, retrieved 2026-10-03
+con = duckdb.connect()
+
+def file_overhead(path):
+    cols = con.execute(f"SELECT SUM(total_compressed_size) FROM parquet_metadata('{path}')").fetchone()[0]
+    return os.path.getsize(path) - cols
+
+def col_bytes(path, cols):
+    q = ",".join(f"'{c}'" for c in cols)
+    return con.execute(f"SELECT COALESCE(SUM(total_compressed_size),0) FROM parquet_metadata('{path}') WHERE path_in_schema IN ({q})").fetchone()[0]</div>
+      </div>
+      <div class="step">
+        <p><strong>Count per layout, then price it.</strong> The CSV is read whole. The single Parquet file pays its overhead, the named columns, and the pickup time column when the question filters on days. The partitioned layout skips folders outside the day range, then pays overhead plus named columns for each file it opens. <code>bill</code> is Athena's rule from Part 1, line for line.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · b4_athena.py, part 2</span>def scanned(layout, cols, days=None):
+    if layout == "csv":
+        return os.path.getsize("out/trips.csv")
+    if layout == "parquet":
+        need = cols + (["tpep_pickup_datetime"] if days else [])
+        return file_overhead("out/trips.parquet") + col_bytes("out/trips.parquet", need)
+    total = 0
+    for d in sorted(os.listdir("out/partitioned")):
+        day = d.split("=")[1]
+        if days and not (days[0] &lt;= day &lt;= days[1]):
+            continue
+        for f in os.listdir(f"out/partitioned/{d}"):
+            p = f"out/partitioned/{d}/{f}"
+            total += file_overhead(p) + col_bytes(p, cols)
+    return total
+
+def bill(b):
+    mb = max(10, math.ceil(b / MB))
+    return mb * MB / TB * USD_PER_TB</div>
+      </div>
+      <div class="step">
+        <p><strong>Ask the three questions of the three layouts, then check one answer.</strong> The last query reads the partitioned copy with DuckDB, so you can confirm it gives the same Q2 answer quoted in Part 2.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · b4_athena.py, part 3</span>Q = [("Q2 avg tip by payment type, month", ["payment_type", "tip_amount"], None),
+     ("Q3 fares on 15 January", ["fare_amount"], ("2024-01-15", "2024-01-15")),
+     ("Q4 pickups per zone, 15-21 January", ["PULocationID"], ("2024-01-15", "2024-01-21"))]
+csv = os.path.getsize("out/trips.csv")
+for name, cols, days in Q:
+    print(name)
+    for layout in ("csv", "parquet", "partitioned"):
+        b = scanned(layout, cols, days)
+        print(f"   {layout:11s} {b:&gt;10,d} bytes  {b / csv:7.2%} of the CSV  billed ${bill(b):.6f}")
+print("at 1 TB of CSV, Q4 partitioned would scan", f"{scanned('partitioned', ['PULocationID'], ('2024-01-15','2024-01-21')) / csv * 1024:.1f}", "GB")
+
+ans = con.execute("""SELECT payment_type, ROUND(AVG(tip_amount),4), COUNT(*) FROM read_parquet('out/partitioned/*/*.parquet', hive_partitioning=true)
+                     GROUP BY 1 ORDER BY 1""").fetchall()
+print("Q2 answer (partitioned):", ans)</div>
+      </div>
+      <div class="step">
+        <p><strong>Run it and compare with this real output.</strong> Your bytes match exactly if your DuckDB version and session 1's files match; a different version may encode slightly differently. Payment type 1 is the row to check: 4.1507 on 78,236 trips.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · python b4_athena.py (real output)</span>Q2 avg tip by payment type, month
+   csv         10,095,345 bytes  100.00% of the CSV  billed $0.000048
+   parquet        197,417 bytes    1.96% of the CSV  billed $0.000048
+   partitioned    381,251 bytes    3.78% of the CSV  billed $0.000048
+Q3 fares on 15 January
+   csv         10,095,345 bytes  100.00% of the CSV  billed $0.000048
+   parquet        822,585 bytes    8.15% of the CSV  billed $0.000048
+   partitioned      8,968 bytes    0.09% of the CSV  billed $0.000048
+Q4 pickups per zone, 15-21 January
+   csv         10,095,345 bytes  100.00% of the CSV  billed $0.000048
+   parquet        760,406 bytes    7.53% of the CSV  billed $0.000048
+   partitioned     58,887 bytes    0.58% of the CSV  billed $0.000048
+at 1 TB of CSV, Q4 partitioned would scan 6.0 GB
+Q2 answer (partitioned): [(0, 1.4884, 4792), (1, 4.1507, 78236), (2, 0.0005, 14805), (3, 0.0003, 629), (4, 0.0362, 1538)]</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>On a real Free Tier account (optional).</strong> Needs an AWS account: AWS says most new customers are not asked for a card on the Free plan, some are, and a Paid plan needs one. In the Athena console, use the primary workgroup or create one, and point its query results at an S3 location of your own; results are written there as objects. Upload session 1's <code>trips.parquet</code> to <code>curated/nyc_taxi_flat/</code> in your bucket, then run a <code>CREATE EXTERNAL TABLE ... STORED AS PARQUET LOCATION 's3://your-bucket/curated/nyc_taxi_flat/'</code> statement with the 19 columns; that DDL is not charged. Run Q1 to Q4 and read the "Data scanned" figure under each result to compare with the bytes measured here. Each of the four queries bills the 10 MB minimum, $0.000048, so about $0.0002 for all four, at $5.00 per TB; storage is a few megabytes at $0.023 per GB-month and requests are $0.005 per 1,000 PUTs and $0.0004 per 1,000 GETs (us-east-1, AWS Price List, 3 October 2026; prices change, so re-verify before relying on them). Delete the bucket, the query results and the table when you are done.</p>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The morning habit that reads the whole raw zone</span>SELECT * FROM raw_trips LIMIT 10;
+-- raw_trips is CSV: no columns to skip, no partitions to prune.
+-- LIMIT caps the rows returned; the bill is the bytes scanned. Check "Data scanned".</div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 5</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Add Q1.</strong> Add a fourth question to <code>Q</code> that names every column for the whole month. Predict which of the two Parquet layouts reads more, then run it and compare with session 1's whole-file sizes, 2,387,037 and 3,023,334 bytes.</li>
+      <li><strong>Leave the floor.</strong> Call <code>bill()</code> on 10,485,760 bytes and then on one byte more. Write down the two prices and the size of the step, and explain it with the rounding rule.</li>
+      <li><strong>Move the filter.</strong> Change Q4's range to the whole month, <code>("2024-01-01", "2024-01-31")</code>, and rerun. Which layout wins now, and why does the single file still pay for <code>tpep_pickup_datetime</code>?</li>
+      <li><strong>Find the expensive query at work.</strong> Open Athena's query history, or ask whoever owns it, and find the five queries with the most data scanned last month. For each, note the table's format and whether the query filters on its partition column.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 4 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · On the 100,000-row sample, Q2 reads 10,095,345 bytes from the CSV and 197,417 from the Parquet file, yet both are billed $0.000048. Why?</p>
+      <button class="qopt" type="button">A · Athena gives a discount to Parquet that cancels out the difference</button>
+      <button class="qopt" type="button">B · Athena bills per query, not per byte</button>
+      <button class="qopt" type="button">C · Both reads are under Athena's 10 MB minimum per query, so both are billed as 10 MB</button>
+      <button class="qopt" type="button">D · DuckDB reports the bytes incorrectly for CSV</button>
+      <p class="qwhy">Bytes are rounded up to the megabyte with a 10 MB minimum. Every sample query sits under the floor, so the sample proves bytes, not dollars; the difference shows up only at scale.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · For Q2, a whole-month question, the partitioned layout reads 381,251 bytes and the single Parquet file 197,417. What explains it?</p>
+      <button class="qopt" type="button">A · The question does not filter on the day, so all 31 small files are opened and each brings its own footer and overhead</button>
+      <button class="qopt" type="button">B · Partitioned files hold more rows than the single file</button>
+      <button class="qopt" type="button">C · The partition column is stored twice in every file</button>
+      <button class="qopt" type="button">D · Athena charges a fee per partition</button>
+      <p class="qwhy">Partitions only pay when the question filters on the partition column. Otherwise you pay for every file's overhead, which is why the same layout wins Q3 and Q4 and loses Q2.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · A table is stored as Snappy-compressed Parquet. Which bytes does Athena bill a query for?</p>
+      <button class="qopt" type="button">A · The decompressed bytes the engine processes in memory</button>
+      <button class="qopt" type="button">B · The size of the result the query returns</button>
+      <button class="qopt" type="button">C · The full size of every file in the table's location, whatever the query asks</button>
+      <button class="qopt" type="button">D · The compressed bytes it reads from S3: Athena bills bytes scanned before decompression</button>
+      <p class="qwhy">The tuning guide says "you pay for the number of bytes scanned before decompression". Compression is a direct discount, and column pruning means only the chunks a query names are read.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every byte count and the Q2 answer</span><span class="note">Measured in this build with DuckDB 1.5.6 on session 1's files from the 100,000-row seeded sample; the code shown is the code that printed them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">$5.00 per TB scanned</span><span class="note">AWS Price List bulk API, us-east-1 offer for AmazonAthena, retrieved 3 October 2026; re-verify before relying on it</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Rounding, the 10 MB minimum, free DDL and failed queries, billed cancellations, "up to 90%"</span><span class="note">Athena pricing page, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Column loading, billing before decompression, small files, over-partitioning, predicate pushdown, partition pruning</span><span class="note">Amazon Athena User Guide, "Optimize data", "Columnar storage formats" and "Partitioning data", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Q3 and Q4 answers across layouts</span><span class="note">Measured with DuckDB in this build; quoted from the source map, not printed by tonight's script</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The Free plan card wording</span><span class="note">AWS Free Tier FAQs, read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Monthly costs at 1,024 GB and 100 queries a day</span><span class="note">Modelled: measured shares scaled linearly, which overstates small-file overhead at large sizes</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">What a megabyte means on the bill</span><span class="note">Not defined at source; the script's 2^20 convention is a choice, taught as one</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The cancelled query, the month-to-date dashboard, ten rows every morning</span><span class="note">Constructed; the billing rules behind each are quoted at source, and LIMIT behaviour on CSV was not measured</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 4 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The meter</b><span>$5.00 per TB scanned, rounded up to the MB, 10 MB minimum (us-east-1, Price List, 3 Oct 2026).</span></div>
+      <div class="cheat-item"><b>Free and not free</b><span>DDL and failed queries free; cancelled queries billed for what they read.</span></div>
+      <div class="cheat-item"><b>Compressed bytes</b><span>Billed before decompression: smaller files are a direct discount.</span></div>
+      <div class="cheat-item"><b>Layout follows the question</b><span>Q3: 8,968 B partitioned vs 822,585 B one file. Q2: 381,251 vs 197,417.</span></div>
+      <div class="cheat-item"><b>A filter is a column</b><span>In one file you fetch the filter column; in a partitioned table the key filters for free.</span></div>
+      <div class="cheat-item"><b>Measure, then confirm</b><span>Overhead + needed chunks from parquet_metadata(); "Data scanned" in the console is the bill.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Athena prices reading; something still has to write the curated files. Session 5 runs a Lambda-style handler against the mocked bucket that turns one day of CSV, 262,544 bytes, into Parquet, 81,729 bytes, then asks when Lambda's per-millisecond billing beats a container that is always on, and why moto happily accepted a timeout real Lambda would reject.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 4 of 8 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b3-the-glue-catalog.html">← Prev: The Glue Data Catalog</a> &nbsp;·&nbsp; <a href="b5-lambda-or-a-container.html">Next: Lambda or a container →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

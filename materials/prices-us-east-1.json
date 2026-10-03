@@ -1,0 +1,436 @@
+{
+ "region": "us-east-1",
+ "retrieved": "2026-10-03",
+ "source": "AWS Price List bulk API, offers/v1.0/aws/<Offer>/current/us-east-1/index.json",
+ "s3": {
+  "STANDARD": [
+   {
+    "offer": "AmazonS3",
+    "sku": "WP9ANXZGBYYSGJEA",
+    "usagetype": "TimedStorage-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "0",
+    "end": "51200",
+    "usd": 0.023,
+    "description": "$0.023 per GB - first 50 TB / month of storage used",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   },
+   {
+    "offer": "AmazonS3",
+    "sku": "WP9ANXZGBYYSGJEA",
+    "usagetype": "TimedStorage-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "51200",
+    "end": "512000",
+    "usd": 0.022,
+    "description": "$0.022 per GB - next 450 TB / month of storage used",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   },
+   {
+    "offer": "AmazonS3",
+    "sku": "WP9ANXZGBYYSGJEA",
+    "usagetype": "TimedStorage-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "512000",
+    "end": "Inf",
+    "usd": 0.021,
+    "description": "$0.021 per GB - storage used / month over 500 TB",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ],
+  "INTELLIGENT_TIERING_FA": [
+   {
+    "offer": "AmazonS3",
+    "sku": "T5CD4UDRVV44YE2T",
+    "usagetype": "TimedStorage-INT-FA-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "0",
+    "end": "51200",
+    "usd": 0.023,
+    "description": "$0.023 per GB - first 50 TB / month of storage used in Intelligent-Tiering, Frequent Access Tier",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   },
+   {
+    "offer": "AmazonS3",
+    "sku": "T5CD4UDRVV44YE2T",
+    "usagetype": "TimedStorage-INT-FA-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "51200",
+    "end": "512000",
+    "usd": 0.022,
+    "description": "$0.022 per GB - next 450 TB / month of storage used in Intelligent-Tiering, Frequent Access Tier",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   },
+   {
+    "offer": "AmazonS3",
+    "sku": "T5CD4UDRVV44YE2T",
+    "usagetype": "TimedStorage-INT-FA-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "512000",
+    "end": "Inf",
+    "usd": 0.021,
+    "description": "$0.021 per GB - over 500 TB / month of storage used in Intelligent-Tiering, Frequent Access Tier",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ],
+  "STANDARD_IA": [
+   {
+    "offer": "AmazonS3",
+    "sku": "379GYJUQ5WFBUYGM",
+    "usagetype": "TimedStorage-SIA-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.0125,
+    "description": "$0.0125 per GB-Month of storage used in Standard-Infrequent Access",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ],
+  "ONEZONE_IA": [
+   {
+    "offer": "AmazonS3",
+    "sku": "KRY2B57FKTA8GJW7",
+    "usagetype": "TimedStorage-ZIA-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.01,
+    "description": "$0.01 per GB-Month of storage used in One Zone-Infrequent Access",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ],
+  "GLACIER_IR": [
+   {
+    "offer": "AmazonS3",
+    "sku": "NMJQ7TNW84EMBGZM",
+    "usagetype": "TimedStorage-GIR-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.004,
+    "description": "$0.004 per GB-Month of storage used in Glacier Instant Retrieval",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ],
+  "GLACIER": [
+   {
+    "offer": "AmazonS3",
+    "sku": "ZGASJWMFVH7NM8RK",
+    "usagetype": "TimedStorage-GlacierByteHrs",
+    "unit": "GB-Mo",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.0036,
+    "description": "$0.0036 per GB / month of storage used - Amazon Glacier",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ],
+  "DEEP_ARCHIVE": [
+   {
+    "offer": "AmazonS3GlacierDeepArchive",
+    "sku": "SKAKWE8C8SPXCVHA",
+    "usagetype": "TimedStorage-GDA-ByteHrs",
+    "unit": "GB-Mo",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.00099,
+    "description": "$0.00099 per GB-Month for storage used in Glacier Deep Archive in US East (N. Virginia)",
+    "publicationDate": "2026-09-11T12:45:07Z"
+   }
+  ],
+  "PUT_TIER1": [
+   {
+    "offer": "AmazonS3",
+    "sku": "E9YHNFENF4XQBZR6",
+    "usagetype": "Requests-Tier1",
+    "unit": "Requests",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 5e-06,
+    "description": "$0.005 per 1,000 PUT, COPY, POST, or LIST requests",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ],
+  "GET_TIER2": [
+   {
+    "offer": "AmazonS3",
+    "sku": "ZWQ6Q48CRJXX4FXE",
+    "usagetype": "Requests-Tier2",
+    "unit": "Requests",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 4e-07,
+    "description": "$0.004 per 10,000 GET and all other requests",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ],
+  "RETRIEVAL_SIA": [
+   {
+    "offer": "AmazonS3",
+    "sku": "7594RTQEE8ND34GA",
+    "usagetype": "Retrieval-SIA",
+    "unit": "GB",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.01,
+    "description": "$0.01 per GB - flat fee for all bytes retrieved in Standard-Infrequent Access",
+    "publicationDate": "2026-09-28T23:04:16Z"
+   }
+  ]
+ },
+ "fargate": {
+  "VCPU_HR": [
+   {
+    "offer": "AmazonECS",
+    "sku": "8CESGAFWKAJ98PME",
+    "usagetype": "USE1-Fargate-vCPU-Hours:perCPU",
+    "unit": "hours",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.04048,
+    "description": "AWS Fargate - vCPU - US East (N.Virginia)",
+    "publicationDate": "2026-09-11T12:44:25Z"
+   }
+  ],
+  "GB_HR": [
+   {
+    "offer": "AmazonECS",
+    "sku": "PBZNQUSEXZUC34C9",
+    "usagetype": "USE1-Fargate-GB-Hours",
+    "unit": "hours",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.004445,
+    "description": "AWS Fargate - Memory  - US East (N.Virginia)",
+    "publicationDate": "2026-09-11T12:44:25Z"
+   }
+  ]
+ },
+ "athena": {
+  "SCAN_TB": [
+   {
+    "offer": "AmazonAthena",
+    "sku": "B6WHE3FUNCDQVVX4",
+    "usagetype": "USE1-DataScannedInTB",
+    "unit": "Terabytes",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 5.0,
+    "description": "5.00 USD per Terabytes for DataScannedInTB in US East (N. Virginia)",
+    "publicationDate": "2026-09-11T12:44:08Z"
+   }
+  ]
+ },
+ "lambda": {
+  "REQUEST": [
+   {
+    "offer": "AWSLambda",
+    "sku": "GU2ZS9HVP6QTQ7KE",
+    "usagetype": "Request",
+    "unit": "Requests",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 2e-07,
+    "description": "AWS Lambda - Total Requests - US East (Northern Virginia)",
+    "publicationDate": "2026-10-01T18:47:46Z"
+   }
+  ],
+  "GB_SECOND": [
+   {
+    "offer": "AWSLambda",
+    "sku": "TG3M4CAGBA3NYQBH",
+    "usagetype": "Lambda-GB-Second",
+    "unit": "Lambda-GB-Second",
+    "begin": "0",
+    "end": "6000000000",
+    "usd": 1.66667e-05,
+    "description": "AWS Lambda - Total Compute - US East (Northern Virginia)-Tier-1",
+    "publicationDate": "2026-10-01T18:47:46Z"
+   },
+   {
+    "offer": "AWSLambda",
+    "sku": "TG3M4CAGBA3NYQBH",
+    "usagetype": "Lambda-GB-Second",
+    "unit": "Lambda-GB-Second",
+    "begin": "6000000000",
+    "end": "15000000000",
+    "usd": 1.5e-05,
+    "description": "AWS Lambda - Total Compute - US East (Northern Virginia)-Tier-2",
+    "publicationDate": "2026-10-01T18:47:46Z"
+   },
+   {
+    "offer": "AWSLambda",
+    "sku": "TG3M4CAGBA3NYQBH",
+    "usagetype": "Lambda-GB-Second",
+    "unit": "Lambda-GB-Second",
+    "begin": "15000000000",
+    "end": "Inf",
+    "usd": 1.33334e-05,
+    "description": "AWS Lambda - Total Compute - US East (Northern Virginia)-Tier-3",
+    "publicationDate": "2026-10-01T18:47:46Z"
+   }
+  ]
+ },
+ "redshift": {
+  "SERVERLESS_RPU_HR": [
+   {
+    "offer": "AmazonRedshift",
+    "sku": "E5AB8HE46XNNWE2Z",
+    "usagetype": "USE1-Redshift:ServerlessUsage",
+    "unit": "RPU-Hr",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.375,
+    "description": "$0.375 per RPU-Hr for Redshift Serverless compute charges in US East (N. Virginia)",
+    "publicationDate": "2026-09-11T12:45:05Z"
+   }
+  ],
+  "RMS_GB_MO": [
+   {
+    "offer": "AmazonRedshift",
+    "sku": "4D22YRE9BB4PNBSA",
+    "usagetype": "USE1-RMS:Serverless",
+    "unit": "GB-Mo",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.024,
+    "description": "$0.024 per GB-Mo for Redshift Managed Storage in US East (N. Virginia)",
+    "publicationDate": "2026-09-11T12:45:05Z"
+   }
+  ]
+ },
+ "glue": {
+  "ETL_DPU_HR": [
+   {
+    "offer": "AWSGlue",
+    "sku": "CXGYW3G8GS2SN9UG",
+    "usagetype": "USE1-ETL-DPU-Hour",
+    "unit": "DPU-Hour",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.44,
+    "description": "$0.44 per Data Processing Unit-Hour for AWS Glue ETL job",
+    "publicationDate": "2026-10-01T23:17:29Z"
+   }
+  ],
+  "CRAWLER_DPU_HR": [
+   {
+    "offer": "AWSGlue",
+    "sku": "7TBP5C45D3X75RCH",
+    "usagetype": "USE1-Crawler-DPU-Hour",
+    "unit": "DPU-Hour",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.44,
+    "description": "$0.44 per Data Processing Unit-Hour for AWS Glue crawler",
+    "publicationDate": "2026-10-01T23:17:29Z"
+   }
+  ],
+  "CATALOG_STORAGE": [
+   {
+    "offer": "AWSGlue",
+    "sku": "QKD9TPUADWXWA4F5",
+    "usagetype": "USE1-Catalog-Storage",
+    "unit": "Obj-Month",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 1e-05,
+    "description": "$1 per 100,000 objects per month for AWS Glue Data Catalog storage",
+    "publicationDate": "2026-10-01T23:17:29Z"
+   }
+  ],
+  "CATALOG_REQUEST": [
+   {
+    "offer": "AWSGlue",
+    "sku": "XUYP7NN729GFEEB7",
+    "usagetype": "USE1-Catalog-Request",
+    "unit": "Request",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 1e-06,
+    "description": "$1 per 1,000,000 requests for AWS Glue Data Catalog request",
+    "publicationDate": "2026-10-01T23:17:29Z"
+   }
+  ]
+ },
+ "bedrock": {
+  "NOVA_MICRO_IN_1K": [
+   {
+    "offer": "AmazonBedrock",
+    "sku": "XAR69MSGZSU6FEM9",
+    "usagetype": "USE1-NovaMicro-input-tokens",
+    "unit": "1K tokens",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 3.5e-05,
+    "description": "$ 0.000035 per 1K tokens for Nova Micro-input-tokens in us-east-1 (N. Virginia)",
+    "publicationDate": "2026-10-03T00:11:38Z"
+   }
+  ],
+  "NOVA_MICRO_OUT_1K": [
+   {
+    "offer": "AmazonBedrock",
+    "sku": "YUSGHKDUPQRC75RK",
+    "usagetype": "USE1-NovaMicro-output-tokens",
+    "unit": "1K tokens",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.00014,
+    "description": "$ 0.00014 per 1K tokens for Nova Micro-output-tokens in us-east-1 (N. Virginia)",
+    "publicationDate": "2026-10-03T00:11:38Z"
+   }
+  ],
+  "NOVA_MICRO_IN_BATCH_1K": [
+   {
+    "offer": "AmazonBedrock",
+    "sku": "Z6CR5WMH7Y2J558H",
+    "usagetype": "USE1-NovaMicro-input-tokens-batch",
+    "unit": "1K tokens",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 1.75e-05,
+    "description": "$ 0.0000175 per 1K tokens for Nova Micro-input-tokens in us-east-1 (N. Virginia)",
+    "publicationDate": "2026-10-03T00:11:38Z"
+   }
+  ],
+  "NOVA_MICRO_OUT_BATCH_1K": [
+   {
+    "offer": "AmazonBedrock",
+    "sku": "MAEEQK3UC24XC6W2",
+    "usagetype": "USE1-NovaMicro-output-tokens-batch",
+    "unit": "1K tokens",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 7e-05,
+    "description": "$ 0.00007per 1K tokens for Nova Micro-output-tokens in us-east-1 (N. Virginia)",
+    "publicationDate": "2026-10-03T00:11:38Z"
+   }
+  ],
+  "NOVA_LITE_IN_1K": [
+   {
+    "offer": "AmazonBedrock",
+    "sku": "QRGWJ3P8FT28EYX2",
+    "usagetype": "USE1-NovaLite-input-tokens",
+    "unit": "1K tokens",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 6e-05,
+    "description": "$0.00006 per 1K tokens for Nova Lite-input-tokens in us-east-1 (N. Virginia)",
+    "publicationDate": "2026-10-03T00:11:38Z"
+   }
+  ],
+  "NOVA_LITE_OUT_1K": [
+   {
+    "offer": "AmazonBedrock",
+    "sku": "CBZ6A6U7XK8WJ3KA",
+    "usagetype": "USE1-NovaLite-output-tokens",
+    "unit": "1K tokens",
+    "begin": "0",
+    "end": "Inf",
+    "usd": 0.00024,
+    "description": "$0.00024 per 1K tokens for Nova Lite-output-tokens in us-east-1 (N. Virginia)",
+    "publicationDate": "2026-10-03T00:11:38Z"
+   }
+  ]
+ }
+}

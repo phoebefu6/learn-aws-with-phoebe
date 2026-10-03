@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 6 of 8. A lake bills bytes, a warehouse bills time. Athena at $5.00 per TB scanned against Redshift Serverless at $0.375 per RPU-hour, modelled to a break-even of about 31 or 123 queries a day, and the 60-second minimum that turns $0.0042 into $0.0500.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Redshift or Athena - learn aws with phoebe">
+<meta property="og:description" content="Analyst session 6 of 8. Same question, two meters: bytes per query or RPU-seconds while busy. The break-even moves from about 31 to about 123 queries a day when the warehouse is busy four hours instead of one (modelled).">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/b6-redshift-or-athena.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Redshift or Athena - learn aws with phoebe">
+<meta name="twitter:description" content="Analyst session 6 of 8. Two billing models, a modelled break-even, and the traps that keep a serverless warehouse billing after your query is done.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 6 · Redshift or Athena - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Analyst session 6 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Analyst track · Session 6 of 8</div>
+    <h1>Redshift or <span class="accent">Athena</span></h1>
+    <p class="sub">Two engines can answer the same SQL question over the same taxi trips, and they send two completely different kinds of bill. Athena charges for the bytes each query reads. Redshift Serverless charges for warehouse capacity, by the second, while queries run, and nothing for compute when they do not. Tonight we put both meters side by side, model the point where one gets cheaper than the other, and find the assumption that decides it. Spoiler: it is not the price list.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Applied</span>
+      <span class="chip audience">Data analysts and engineers</span>
+      <span class="chip audience">Python, runs locally, no AWS account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Two meters, the break-even, the traps</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: model both bills</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 4 measured what one question costs on Athena: the average tip by payment type reads 1.96% of the CSV's bytes from a single Parquet file, which is about 20 GB if the CSV were a terabyte. Tonight that 20 GB becomes the Athena side of a comparison. The other side is Redshift Serverless, a warehouse you never size by hand but which bills by time instead of bytes. Neither engine runs on a laptop, so the build-along is a cost model: real prices, a real measured scan size, and one assumption about how busy the warehouse is that you set yourself and must defend.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = run the code yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> The two billing models in one sentence each, a twenty-line script that prices both for any query mix you give it, the two modelled break-evens it prints (about 31 and about 123 queries a day) and why they differ by a factor of four, and three ways a serverless warehouse keeps billing after the query you care about has finished.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers two billing models</span>
+      <h2>One meter counts bytes, the other counts busy seconds</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Athena charges $5.00 per TB scanned, per query. Redshift Serverless charges $0.375 per RPU-hour, and its billing page is precise about when: "When queries run, you're billed according to the capacity used in a given duration, in RPU hours on a per-second basis." Then the line that makes it serverless: "When no queries are running, you aren't billed for compute capacity." Storage is a separate meter on both sides. All prices here are us-east-1, AWS Price List, 3 October 2026; prices change without notice, so re-verify before relying on them.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 352" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One constructed day from midnight to midnight with two lanes. The Athena lane, 5 dollars per TB scanned, shows nine thin ticks between 9:00 and 20:00, one charge per query, each billed on its bytes with a 10 MB minimum. The Redshift Serverless lane, 0.375 dollars per RPU-hour, shows highlighted blocks only while queries run: 9:00 to about 11:00, 14:00 to about 15:00, a short block at 16:30, and a sliver at 20:00 where a 5-second query is billed for 60 seconds. Between the blocks the warehouse is idle and bills no compute. Below, a storage strip runs the whole day: managed storage at 0.024 dollars per GB-month, billed separately. One RPU is 16 GB of memory; base capacity defaults to 128 RPU and can be set from 4 to 512, or 1,024 in five Regions including us-east-1.">
+        <defs>
+          <filter id="b6aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="61" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b6aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b6aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b6aH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b6aL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b6aS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b6aB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b6aA { font: 700 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #183177; }
+          .b6aN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b6aH" x="30" y="26">ONE CONSTRUCTED DAY, TWO METERS ON THE SAME QUESTIONS</text>
+
+        <g filter="url(#b6aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M150 70 L850 70 M150 66 L150 74 M325 66 L325 74 M500 66 L500 74 M675 66 L675 74 M850 66 L850 74" stroke="#4E5A6B" stroke-width="1.4"/>
+          <rect x="150" y="86" width="700" height="36" rx="5" transform="rotate(-0.2 500 104)" fill="#FFFFFF"/>
+          <path d="M412 90 L412 118 M427 90 L427 118 M449 90 L449 118 M471 90 L471 118 M558 90 L558 118 M568 90 L568 118 M588 90 L588 118 M631 90 L631 118 M733 90 L733 118" stroke="#183177" stroke-width="2.4"/>
+          <rect x="150" y="160" width="700" height="36" rx="5" transform="rotate(0.2 500 178)" fill="#FFFFFF"/>
+          <rect x="412" y="163" width="62" height="30" rx="3" transform="rotate(-0.8 443 178)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="558" y="163" width="35" height="30" rx="3" transform="rotate(0.9 575 178)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="631" y="163" width="6" height="30" rx="1" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="731" y="163" width="4" height="30" rx="1" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="150" y="234" width="700" height="14" rx="3" transform="rotate(-0.2 500 241)" fill="url(#b6aHc)"/>
+        </g>
+
+        <text class="b6aA" x="150" y="62" text-anchor="middle">0:00</text>
+        <text class="b6aA" x="325" y="62" text-anchor="middle">6:00</text>
+        <text class="b6aA" x="500" y="62" text-anchor="middle">12:00</text>
+        <text class="b6aA" x="675" y="62" text-anchor="middle">18:00</text>
+        <text class="b6aA" x="850" y="62" text-anchor="middle">24:00</text>
+
+        <text class="b6aL" x="30" y="102">Athena</text>
+        <text class="b6aS" x="30" y="118">$5.00 per TB</text>
+        <text class="b6aS" x="412" y="140">each tick: one query, billed on its bytes (10 MB minimum)</text>
+
+        <text class="b6aL" x="30" y="172">Redshift</text>
+        <text class="b6aL" x="30" y="187">Serverless</text>
+        <text class="b6aS" x="30" y="203">$0.375/RPU-hour</text>
+        <text class="b6aS" x="180" y="184">idle: no compute charge</text>
+        <text class="b6aS" x="760" y="184">idle</text>
+        <text class="b6aB" x="412" y="216">busy: billed per second</text>
+        <text class="b6aB" x="690" y="216">5 s query, billed 60 s</text>
+
+        <text class="b6aL" x="30" y="246">Storage</text>
+        <text class="b6aS" x="150" y="268">managed storage $0.024 per GB-month: billed separately from compute, idle or busy</text>
+
+        <text class="b6aN" x="30" y="298">1 RPU = 16 GB of memory. Base capacity defaults to 128 RPU and can be set from 4 to 512</text>
+        <text class="b6aN" x="30" y="318">(1,024 in five Regions including us-east-1). Prices: us-east-1, AWS Price List, 3 October 2026; re-verify.</text>
+        <text class="b6aS" x="30" y="338">A constructed day; the short blocks are drawn wider than scale so they can be seen.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - Athena charges per query blip; Redshift Serverless charges for the busy windows, never less than 60 seconds</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Two meters, one question<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Athena</strong> prices each query on its own: bytes scanned, "rounded up to the nearest megabyte, with a 10 MB minimum per query", at $5.00 per TB. Two analysts running the same query pay twice. A query that reads nothing much costs almost nothing. Session 4 showed how layout moves that number.</p>
+        <p><strong>Redshift Serverless</strong> prices time. "You pay for the workloads you run in RPU-hours on a per-second basis, with a 60-second minimum charge." An RPU is a unit of warehouse capacity, and "One RPU provides 16 GB of memory." While any query is running, the warehouse bills the capacity it is using, second by second, at $0.375 per RPU-hour. Ten queries that overlap inside the same busy minute share that minute; ten queries spread across ten hours keep it busy for ten separate stretches. When nothing runs, compute bills nothing.</p>
+        <p>So the two engines answer different questions about your workload. Athena asks "how many bytes, how many times?" Redshift Serverless asks "how many seconds was anything running, and at what capacity?" The same team can get a cheap answer from one and an expensive answer from the other, and the build-along shows exactly where they swap.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What base capacity sets, and why the default matters<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Base capacity is the RPU count a workgroup starts queries with. The capacity page: "The default base capacity for Amazon Redshift Serverless is 128 RPUs." It can be set "from 4 RPUs to 512 RPUs", and only "to 4 RPUs, or in units of 8 at or above 8 RPUs (8,16,24...512)". Five Regions, us-east-1 among them, allow up to 1,024. Because billing is RPU-hours, the RPU count multiplies every busy second: the default is sixteen times the 8 RPU the build-along assumes. Whether 8 RPU is enough for your queries is a performance question these pages do not answer; the console's query monitoring does. What these pages do answer is that capacity and time multiply, so halving either halves the compute line.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Storage is a third meter, on both sides<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Redshift billing page: "Storage is billed by GB / month. Storage billing is separate from billing for compute capacity." Managed storage is $0.024 per GB-month; S3 Standard, where Athena's data lives, is $0.023 for the first 50 TB (both us-east-1, AWS Price List, 3 October 2026; re-verify). The two are close enough that storage rarely decides the choice. The build-along includes it anyway, so the comparison is a whole monthly bill and not just the compute part: the Parquet copy of a terabyte of CSV is 242.1 GB, which is $5.57 a month in S3 and $5.81 in managed storage.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The month-end crunch.</strong> A finance team runs almost nothing for three weeks, then hammers the same tables for two days at month end. On Athena those two days cost exactly the bytes they read, and the quiet weeks cost only storage. On Redshift Serverless the quiet weeks also cost only storage, because an idle warehouse bills no compute, and the crunch costs however many seconds the warehouse stayed busy. Neither engine punishes the quiet weeks; they differ only in what they count during the crunch. The scenario is constructed; both billing rules are quoted from AWS's pricing and billing pages.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the modelled break-even</span>
+      <h2>Where the lines cross, and what moves the crossing</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">The build-along prices one Q2-style query, 20 GB scanned, on Athena at five daily volumes, and prices an 8 RPU Redshift Serverless warehouse that is busy one hour or four hours a day. Every row is modelled: real prices, a scan size scaled from session 4's measurement, and busy hours that are an assumption, not a measurement. Athena's line rises with every query. Redshift's lines are flat, because the model holds busy hours fixed. Where they cross is the break-even.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 396" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A modelled monthly cost chart. Horizontal axis: queries a day from 0 to 400. Vertical axis: dollars a month from 0 to 1,000. The Athena line rises from about 5.57 dollars at zero queries through 34.87 dollars at 10 a day, 152.05 at 50, 298.54 at 100 and 884.47 at 300, reaching 2,935.26 at 1,000 a day, off the chart. Two flat lines show Redshift Serverless at 8 RPU: 95.81 dollars a month when busy 1 hour a day, and 365.81 dollars when busy 4 hours a day. Highlighted crossover points mark the break-even at about 31 queries a day and about 123 queries a day.">
+        <defs>
+          <filter id="b6bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b6bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b6bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b6bH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b6bL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b6bS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b6bB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b6bA { font: 700 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #183177; }
+          .b6bN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b6bH" x="30" y="26">MONTHLY BILL FOR ONE 20 GB QUESTION, ATHENA AGAINST AN 8 RPU WAREHOUSE (MODELLED)</text>
+        <text class="b6bA" x="30" y="46">$ a month</text>
+
+        <g filter="url(#b6bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M110 60 L110 300 L810 300" stroke="#4E5A6B" stroke-width="1.4"/>
+          <path d="M104 240 L110 240 M104 180 L110 180 M104 120 L110 120 M104 60 L110 60 M285 300 L285 306 M460 300 L460 306 M635 300 L635 306 M810 300 L810 306" stroke="#4E5A6B" stroke-width="1.4"/>
+          <path d="M110 277 L810 277" stroke="#183177" stroke-width="2.2"/>
+          <path d="M110 212 L810 212" stroke="#183177" stroke-width="2.2"/>
+          <path d="M110 299 L704 60" stroke="#232F3E" stroke-width="2.4"/>
+          <circle cx="128" cy="292" r="3.5" fill="#FFFFFF"/>
+          <circle cx="198" cy="264" r="3.5" fill="#FFFFFF"/>
+          <circle cx="285" cy="228" r="3.5" fill="#FFFFFF"/>
+          <circle cx="635" cy="88" r="3.5" fill="#FFFFFF"/>
+          <circle cx="164" cy="277" r="6" fill="#FF9900" stroke="#5C3300"/>
+          <circle cx="325" cy="212" r="6" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="b6bS" x="100" y="304" text-anchor="end">$0</text>
+        <text class="b6bS" x="100" y="244" text-anchor="end">$250</text>
+        <text class="b6bS" x="100" y="184" text-anchor="end">$500</text>
+        <text class="b6bS" x="100" y="124" text-anchor="end">$750</text>
+        <text class="b6bS" x="100" y="64" text-anchor="end">$1,000</text>
+        <text class="b6bS" x="110" y="320" text-anchor="middle">0</text>
+        <text class="b6bS" x="285" y="320" text-anchor="middle">100</text>
+        <text class="b6bS" x="460" y="320" text-anchor="middle">200</text>
+        <text class="b6bS" x="635" y="320" text-anchor="middle">300</text>
+        <text class="b6bS" x="810" y="320" text-anchor="middle">400</text>
+        <text class="b6bA" x="810" y="338" text-anchor="end">queries a day</text>
+
+        <text class="b6bL" x="470" y="80">Athena, 20 GB per query</text>
+        <text class="b6bS" x="716" y="64">to $2,935.26 at 1,000</text>
+        <text class="b6bL" x="540" y="270">Redshift 8 RPU, busy 1 h/day: $95.81</text>
+        <text class="b6bL" x="540" y="205">Redshift 8 RPU, busy 4 h/day: $365.81</text>
+        <text class="b6bB" x="172" y="294">about 31 a day</text>
+        <text class="b6bB" x="334" y="230">about 123 a day</text>
+
+        <text class="b6bS" x="30" y="362">Athena per month: 10/day $34.87 · 50 $152.05 · 100 $298.54 · 300 $884.47 · 1,000 $2,935.26</text>
+        <text class="b6bN" x="30" y="382">Modelled: 20 GB scanned per query, 8 RPU, storage included; us-east-1 Price List, 3 October 2026.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange points are the break-evens; four times the busy hours moves the crossing about four times further right</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Read the two bills<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>At 20 GB a query and $5.00 per TB, one Athena run costs just under ten cents. A month of it, plus $5.57 to store the Parquet in S3, comes to:</p>
+        <ul>
+          <li><strong>10 queries a day:</strong> $34.87 a month.</li>
+          <li><strong>50 a day:</strong> $152.05. <strong>100 a day:</strong> $298.54.</li>
+          <li><strong>300 a day:</strong> $884.47. <strong>1,000 a day:</strong> $2,935.26.</li>
+        </ul>
+        <p>The 8 RPU warehouse, plus managed storage, costs $95.81 a month if it is busy one hour a day and $365.81 if it is busy four. The script solves for the crossing: about 31 queries a day against the one-hour warehouse, about 123 against the four-hour one. Below the crossing Athena is cheaper; above it the warehouse is. All of this is us-east-1, AWS Price List, 3 October 2026, and modelled: re-verify the prices, and expect your numbers to differ.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Busy hours decide it, and nobody prints them for you<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The price list did not change between the two break-evens. The only thing that changed was one number you typed: how many hours a day the warehouse is busy. Four times the hours, about four times the break-even. That is the honest headline of the whole comparison: whichever engine is "cheaper" depends on an assumption about your workload's shape, and the assumption is worth more scrutiny than either price.</p>
+        <p>The model also holds busy hours flat while the query count rises, which real warehouses do not do. Fifty more queries a day either fit inside minutes the warehouse was already busy, and cost nothing extra, or land in quiet hours and wake it up. Clustered queries favour the warehouse; scattered ones favour Athena. Before you trust either line, find out when your queries actually run.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the model leaves out<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>It assumes 8 RPU is enough to run the queries in the hours given, which is a performance claim nobody has measured here. It charges the warehouse only for managed storage, as if the data lived only there; if the lake copy stays in S3 too, add its $5.57. It prices one query shape, and real dashboards mix shapes. It ignores the 60-second minimum and the traps in Part 3, all of which push the warehouse's real bill above its line. And it says nothing about how the warehouse's tables should be modelled once data is loaded: facts, dimensions and marts are taught in <a href="https://phoebefu6.github.io/learn-data-warehouse-with-phoebe/">learn-data-warehouse</a>. Treat the break-evens as a way to ask the right question, not as an answer to it.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The comparison that assumed one busy hour.</strong> A team counts about 80 dashboard queries a day, sees that the modelled break-even against a one-hour warehouse is about 31, and moves to Redshift Serverless. The dashboards refresh at different times across a ten-hour working day, so the warehouse is rarely idle for long. The bill lands far above the one-hour line, because the assumption, not the price, was wrong. Running the script with the busy hours their query log actually showed would have told them before the move. The scenario is constructed; your numbers will differ.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers the traps, and why it need not be either-or</span>
+      <h2>Three ways the warehouse meter outlives your query</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Athena's traps are about bytes: the wrong layout, the unpartitioned filter. Redshift Serverless's traps are about seconds, and the billing page names them itself. A short query is billed as a minute. An open connection can count as activity. A cancelled query is billed for the time it ran. None of them is a bug; all three are written down; most teams meet them on the invoice first.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 346" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three panels. Panel 1, the 60-second minimum: a 5-second run drawn inside a highlighted 60-second billed bar; at 8 RPU the modelled charge is 0.0500 dollars, not 0.0042. Panel 2, the cancelled query: a run bar that stops at a cancel line, with the part that never ran outlined; billed for the time it ran. Panel 3, the open connection pool: a BI tool holding three connections to a workgroup through an overnight stretch with no user queries; the billing page says open pools can generate costs even when no user workloads run. Below: Athena and Redshift Serverless each point at the same S3 lake of curated Parquet, because storage is decoupled from compute, so both engines can coexist.">
+        <defs>
+          <filter id="b6cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b6cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b6cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b6cH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b6cL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b6cS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b6cB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b6cV { font: 800 18px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #0E1F52; }
+          .b6cN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b6cH" x="30" y="26">THREE WAYS THE WAREHOUSE METER RUNS LONGER THAN YOUR QUERY</text>
+
+        <g filter="url(#b6cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="256" height="176" rx="9" transform="rotate(-0.5 158 128)" fill="#FFFFFF"/>
+          <rect x="50" y="104" width="216" height="22" rx="3" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="50" y="104" width="18" height="22" rx="2" fill="#183177" stroke="#183177"/>
+
+          <rect x="312" y="40" width="256" height="176" rx="9" transform="rotate(0.4 440 128)" fill="#FFFFFF"/>
+          <rect x="332" y="104" width="120" height="22" rx="3" fill="#183177" stroke="#183177"/>
+          <rect x="452" y="104" width="96" height="22" rx="3" fill="#FFFFFF" stroke="#C5CCD8"/>
+          <path d="M452 90 L452 138" stroke-width="2.6"/>
+
+          <rect x="594" y="40" width="256" height="176" rx="9" transform="rotate(-0.4 722 128)" fill="#FFFFFF"/>
+          <rect x="614" y="86" width="80" height="40" rx="5" transform="rotate(-1.5 654 106)" fill="#FFFFFF"/>
+          <rect x="764" y="86" width="80" height="40" rx="5" transform="rotate(1.2 804 106)" fill="#EEF1FA"/>
+          <path d="M700 98 L758 98 M700 106 L758 106 M700 114 L758 114" stroke="#2B4A9A" stroke-width="1.8"/>
+          <rect x="614" y="138" width="230" height="12" rx="3" fill="url(#b6cHc)"/>
+
+          <rect x="60" y="262" width="200" height="44" rx="7" transform="rotate(-1 160 284)" fill="#FFFFFF"/>
+          <rect x="340" y="262" width="200" height="44" rx="7" transform="rotate(0.6 440 284)" fill="#EEF1FA"/>
+          <rect x="620" y="262" width="200" height="44" rx="7" transform="rotate(1 720 284)" fill="#FFFFFF"/>
+          <path d="M266 284 L334 284" marker-end="url(#b6cAr)"/>
+          <path d="M614 284 L546 284" marker-end="url(#b6cAr)"/>
+        </g>
+
+        <text class="b6cL" x="46" y="68">1 · the 60-second minimum</text>
+        <text class="b6cS" x="50" y="96">ran 5 s</text>
+        <text class="b6cB" x="180" y="96">billed 60 s</text>
+        <text class="b6cV" x="46" y="162">$0.0500</text>
+        <text class="b6cS" x="46" y="184">not $0.0042, at 8 RPU (modelled)</text>
+        <text class="b6cS" x="46" y="204">a short query bills a full minute</text>
+
+        <text class="b6cL" x="328" y="68">2 · the cancelled query</text>
+        <text class="b6cS" x="332" y="96">ran until cancel</text>
+        <text class="b6cS" x="470" y="96">never ran</text>
+        <text class="b6cL" x="328" y="162">billed for the time it ran</text>
+        <text class="b6cS" x="328" y="184">cancel stops the meter;</text>
+        <text class="b6cS" x="328" y="204">it does not refund it</text>
+
+        <text class="b6cL" x="610" y="68">3 · the open connection pool</text>
+        <text class="b6cS" x="626" y="110">BI tool</text>
+        <text class="b6cS" x="772" y="110">workgroup</text>
+        <text class="b6cS" x="614" y="166">overnight: no user queries</text>
+        <text class="b6cS" x="614" y="186">the docs: open pools can</text>
+        <text class="b6cS" x="614" y="204">generate costs anyway</text>
+
+        <text class="b6cH" x="30" y="248">THE LAKE STAYS IN S3, SO BOTH ENGINES CAN READ IT</text>
+        <text class="b6cL" x="76" y="281">Athena</text>
+        <text class="b6cS" x="76" y="297">reads the files in place</text>
+        <text class="b6cL" x="356" y="281">S3: curated Parquet</text>
+        <text class="b6cS" x="356" y="297">one lake, its own meter</text>
+        <text class="b6cL" x="636" y="281">Redshift Serverless</text>
+        <text class="b6cS" x="636" y="297">billed per second while busy</text>
+
+        <text class="b6cN" x="30" y="332">Lens BP 11.1: decoupling storage from compute lets you manage the cost of each separately.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange bar is the minute you pay for when you asked for five seconds</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The 60-second minimum<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The billing page: "The minimum charge is for 60 seconds of resource usage, metered on a per-second basis." So a 5-second query on an idle 8 RPU warehouse is billed for 60 seconds: $0.0500, not the $0.0042 its five seconds would suggest. The build-along prints both (modelled; us-east-1, AWS Price List, 3 October 2026; re-verify). One such query is pocket change. A health check, a dashboard tile or a scheduler ping that fires every few minutes into an otherwise idle warehouse turns pocket change into a line item, because each one buys a full minute. Athena has a floor too, the 10 MB minimum, but at $0.000048 a query it is a much quieter floor.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Connection pools and cancelled queries<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Two sentences from the same billing page belong on every warehouse owner's wall. First: "maintaining open connection pools can generate costs even when no actual user workloads are running." A BI tool or notebook that holds connections open overnight can keep the meter alive with nobody asking anything. Second: "If you run a query and cancel it before it finishes, you are still billed for the time the query ran." Athena has the byte version of the same rule: cancelled queries are billed for the data they scanned. On both engines, cancel limits the damage; it does not undo it. How much an open pool actually costs on your workgroup is not something these pages measured; the billing page only says it can.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Both, not either: the lake stays in S3<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Data Analytics Lens, best practice 11.1: "Decoupling storage from compute allows you to manage the cost of storage and compute separately." Because the curated Parquet stays in S3 and is described once in the Glue Data Catalog, choosing Redshift Serverless for one workload does not force it on the others. The Glue documentation lists Athena and Redshift Spectrum among the services that read the catalog. A common shape is Athena for occasional, scattered questions, and a warehouse for the dense, repeated ones that keep it busy enough to earn its line. Remember the Lens dates from December 2023, so check current guidance before quoting it as policy. Which tables to load and how to model them belongs to <a href="https://phoebefu6.github.io/learn-data-warehouse-with-phoebe/">learn-data-warehouse</a>; the pipelines that load them belong to <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">learn-data-engineering</a>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The dashboard that never logged off.</strong> A team moves its sales dashboards onto Redshift Serverless, and the daytime compute line looks exactly like the model. The overnight line does not look like zero. The dashboard tool keeps a connection pool open to the workgroup around the clock, and the billing page says that can generate cost with no user workload running. Setting the tool's pool to close idle connections, and a usage limit on the workgroup, brings the night back to quiet. The scenario is constructed; the billing behaviour is quoted from Redshift's billing page, and its size on any real workgroup was not measured here.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Both bills in twenty lines</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">One Python file, no imports, under a second to run. It holds four prices from the AWS Price List, one scan size from session 4, and one assumption you control: how busy the warehouse is. It prints Athena's monthly bill at five volumes, the warehouse's bill at two busy levels, the two break-evens, and the 60-second minimum in dollars. The output below is pasted from a real run of exactly this code. Before you run it, guess the break-even for a warehouse busy one hour a day.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 206" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along pipeline. Price List constants, 5 dollars per TB, 0.375 dollars per RPU-hour and two storage prices, feed into the highlighted box of your assumptions: GB per query set to 20.0, busy hours a day, and a base of 8 RPU. These feed two monthly bill functions, athena_month and redshift_month, which feed a solver that finds where they are equal: about 31 or 123 queries a day. A loop arrow returns from the result to the assumptions: step 6 changes one assumption and reruns, while the prices never change.">
+        <defs>
+          <filter id="b6dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="73" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b6dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b6dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b6dH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b6dL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b6dS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b6dB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b6dW { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #FFFFFF; }
+          .b6dN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b6dH" x="30" y="30">WHAT THE SCRIPT DOES: TWO METERS, ONE ASSUMPTION THAT MOVES THE ANSWER</text>
+
+        <g filter="url(#b6dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="50" width="170" height="86" rx="8" transform="rotate(-1 115 93)" fill="#FFFFFF"/>
+          <rect x="230" y="50" width="190" height="86" rx="8" transform="rotate(0.8 325 93)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="450" y="50" width="180" height="86" rx="8" transform="rotate(-0.6 540 93)" fill="#EEF1FA"/>
+          <rect x="660" y="50" width="190" height="86" rx="8" transform="rotate(0.5 755 93)" fill="#183177" stroke="#183177"/>
+          <path d="M206 93 L224 93" marker-end="url(#b6dAr)"/>
+          <path d="M426 93 L444 93" marker-end="url(#b6dAr)"/>
+          <path d="M636 93 L654 93" marker-end="url(#b6dAr)"/>
+          <path d="M755 142 L755 166 L325 166 L325 144" marker-end="url(#b6dAr)"/>
+        </g>
+
+        <text class="b6dL" x="44" y="76">Price List</text>
+        <text class="b6dS" x="44" y="98">$5.00/TB · $0.375/RPU-h</text>
+        <text class="b6dS" x="44" y="118">storage $0.023, $0.024</text>
+
+        <text class="b6dL" x="244" y="76">Your assumptions</text>
+        <text class="b6dB" x="244" y="98">GB_PER_QUERY = 20.0</text>
+        <text class="b6dB" x="244" y="118">busy hours · base_rpu = 8</text>
+
+        <text class="b6dL" x="464" y="76">Two monthly bills</text>
+        <text class="b6dS" x="464" y="98">athena_month(q)</text>
+        <text class="b6dS" x="464" y="118">redshift_month(busy)</text>
+
+        <text class="b6dW" x="674" y="76">Solve where equal</text>
+        <text class="b6dW" x="674" y="100">about 31 or 123</text>
+        <text class="b6dW" x="674" y="120">queries a day</text>
+
+        <text class="b6dN" x="30" y="192">Step 6 changes one assumption (GB_PER_QUERY = 6.0) and reruns; the prices never change.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange box is the only part you invent; everything else is a price or a measurement</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Reuse the environment from analyst session 1.</strong> Same folder, same <code>.venv</code>. This script imports nothing, so there is nothing new to install and no files to read; it does not need the <code>out/</code> folder. It was run on Python 3.11.11.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · setup (verified 3 October 2026)</span>. .venv/bin/activate
+python --version   # 3.10 or newer; verified on 3.11.11</div>
+      </div>
+      <div class="step">
+        <p><strong>The prices and the two inputs.</strong> Four prices from the Price List: Athena per TB, Redshift Serverless per RPU-hour, managed storage and S3 Standard per GB-month. <code>GB_PER_QUERY</code> is session 4's Q2 share of the CSV (1.96%) at 1 TB. <code>STORED_GB</code> is the Parquet copy of that terabyte.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · b6_redshift_or_athena.py, part 1</span># Analyst session 6 - Redshift Serverless or Athena: a lake bills bytes, a warehouse bills time.
+# Prices: us-east-1, AWS Price List, retrieved 2026-10-03. Bytes: measured in session 4.
+# The warehouse side is MODELLED: how long your queries keep RPUs busy is an assumption you set.
+ATHENA_TB, RPU_HR, RMS_GB_MO, S3_GB_MO = 5.00, 0.375, 0.024, 0.023
+GB_PER_QUERY = 20.0          # Q2 on 1 TB of CSV-equivalent data, stored as one Parquet file (session 4)
+STORED_GB = 242.1            # that table as Parquet</div>
+      </div>
+      <div class="step">
+        <p><strong>Two monthly bills.</strong> Athena: queries a day, times 30 days, times the GB each reads, priced per TB, plus S3 storage. Redshift Serverless: busy hours a day, times 30, times the RPU count, priced per RPU-hour, plus managed storage. Notice what is missing from <code>redshift_month</code>: the number of queries. That is the model's biggest assumption, written as code.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · b6_redshift_or_athena.py, part 2</span>def athena_month(queries_per_day):
+    return queries_per_day * 30 * GB_PER_QUERY / 1024 * ATHENA_TB + STORED_GB * S3_GB_MO
+
+def redshift_month(busy_hours_per_day, base_rpu=8):
+    return busy_hours_per_day * 30 * base_rpu * RPU_HR + STORED_GB * RMS_GB_MO</div>
+      </div>
+      <div class="step">
+        <p><strong>Print the table, solve the break-evens, price the minimum.</strong> The break-even line subtracts Athena's fixed storage from the warehouse bill and divides by what one more daily query costs Athena a month. The last line prices the 60-second minimum against what five seconds would have cost.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · b6_redshift_or_athena.py, part 3</span>print(f"{'queries/day':&gt;11s} {'Athena $/mo':&gt;12s} | warehouse busy 1 h/day at 8 RPU: ${redshift_month(1):,.2f}/mo, 4 h/day: ${redshift_month(4):,.2f}/mo")
+for q in (10, 50, 100, 300, 1000):
+    print(f"{q:&gt;11d} {athena_month(q):&gt;12,.2f}")
+for busy in (1, 4):
+    cross = (redshift_month(busy) - STORED_GB * S3_GB_MO) / (30 * GB_PER_QUERY / 1024 * ATHENA_TB)
+    print(f"break-even with a warehouse busy {busy} h/day at 8 RPU: about {cross:,.0f} queries a day")
+print("60-second minimum: a 5-second query on an idle warehouse bills", f"${8 * 60 / 3600 * RPU_HR:.4f}", "at 8 RPU, not", f"${8 * 5 / 3600 * RPU_HR:.4f}")</div>
+      </div>
+      <div class="step">
+        <p><strong>Run it and compare with this real output.</strong> This one has no measurement in it, so your numbers match exactly unless you changed an input. Check the first line: $95.81 and $365.81.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · python b6_redshift_or_athena.py (real output)</span>queries/day  Athena $/mo | warehouse busy 1 h/day at 8 RPU: $95.81/mo, 4 h/day: $365.81/mo
+         10        34.87
+         50       152.05
+        100       298.54
+        300       884.47
+       1000     2,935.26
+break-even with a warehouse busy 1 h/day at 8 RPU: about 31 queries a day
+break-even with a warehouse busy 4 h/day at 8 RPU: about 123 queries a day
+60-second minimum: a 5-second query on an idle warehouse bills $0.0500 at 8 RPU, not $0.0042</div>
+      </div>
+      <div class="step">
+        <p><strong>Now partition the question.</strong> Session 4 measured Q4, pickups per zone for one week, on the partitioned layout: at 1 TB of CSV it scans 6.0 GB instead of 20. Change the scan size, and the stored size to the partitioned copy of that terabyte, 306.7 GB, then rerun. Before you do, reason it out: each Athena query now costs under a third of what it did, while the warehouse line barely moves, so both break-evens should move a long way to the right, by roughly the ratio of 20 to 6. Then run it and read your line; do not trust the estimate over the printout.</p>
+        <div class="prompt-box good"><span class="label">★ Step 6 · edit two lines, rerun</span>GB_PER_QUERY = 6.0           # Q4 partitioned at 1 TB (session 4)
+STORED_GB = 306.7            # the partitioned copy of that terabyte</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>On a real Free Tier account (optional).</strong> Needs an AWS account: AWS says most new customers are not asked for a card on the Free plan, some are, and a Paid plan needs one. These pages did not verify any Free plan coverage for Redshift Serverless, so assume every RPU-second is billed: compute is $0.375 per RPU-hour, billed per second with a 60-second minimum, and managed storage is $0.024 per GB-month (us-east-1, AWS Price List, 3 October 2026; prices change, so re-verify before relying on them). If you try it, create the workgroup with base capacity set to 8, or 4, instead of the default 128, and set a usage limit on RPU-hours before you run anything. Load or query session 1's small Parquet file, run Q2, and close your SQL client when you finish so no connection stays open. Then delete the workgroup and its namespace. A single 5-second query on an idle 8 RPU workgroup is the $0.0500 the script prints; how long your own queries keep it busy is what you are actually paying for.</p>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The comparison that hides its biggest assumption</span># "Redshift is cheaper above 31 queries a day."
+# True only if the warehouse is busy 1 h/day at 8 RPU. At 4 h/day the same script says about 123.
+# Say the busy hours out loud, and where they came from, every time you quote a break-even.</div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 7</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Move the warehouse.</strong> Change <code>base_rpu</code> to 4 and rerun. Predict first: what happens to the two warehouse bills and to the break-evens, and why does the storage part not change?</li>
+      <li><strong>Price the pings.</strong> A monitoring tool sends one 2-second query every 15 minutes, all day, to an otherwise idle 8 RPU warehouse. Using the 60-second minimum, write out how many billed minutes that is a day, and the formula for its monthly cost at $0.375 per RPU-hour. Then compute it, and label the result modelled.</li>
+      <li><strong>Find your busy hours.</strong> From any query log you can reach at work, count how many distinct hours of a typical day had at least one query running. That count, not the query total, is the number to put into <code>redshift_month</code>.</li>
+      <li><strong>Pick per workload, not per company.</strong> List three of your team's recurring query workloads. For each, write which engine the script's logic favours and the one assumption that would flip it.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 6 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · A Redshift Serverless workgroup runs no queries at all between 22:00 and 07:00, and nothing holds a connection open. What does it bill for those nine hours?</p>
+      <button class="qopt" type="button">A · Its base capacity, at the full RPU-hour rate, because the warehouse still exists</button>
+      <button class="qopt" type="button">B · No compute, only managed storage, which is billed separately by GB-month</button>
+      <button class="qopt" type="button">C · Nothing at all, including storage</button>
+      <button class="qopt" type="button">D · A 60-second minimum for every hour it sits idle</button>
+      <p class="qwhy">"When no queries are running, you aren't billed for compute capacity." Storage keeps its own meter: "Storage billing is separate from billing for compute capacity."</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · The script prints a break-even of about 31 queries a day for one warehouse and about 123 for another. The prices are identical. What changed?</p>
+      <button class="qopt" type="button">A · The Athena price per TB</button>
+      <button class="qopt" type="button">B · The number of GB each query scans</button>
+      <button class="qopt" type="button">C · The managed storage price</button>
+      <button class="qopt" type="button">D · The assumed busy hours a day: 1 hour against 4 hours at 8 RPU</button>
+      <p class="qwhy">Four times the busy hours, about four times the break-even. The busy hours are an assumption you set, which is why the comparison is modelled and why your own query log is the input that matters most.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · A dashboard tile fires a 5-second query into an idle 8 RPU warehouse. What is it billed, at $0.375 per RPU-hour?</p>
+      <button class="qopt" type="button">A · $0.0500, because Redshift Serverless has a 60-second minimum charge</button>
+      <button class="qopt" type="button">B · $0.0042, the cost of exactly five seconds</button>
+      <button class="qopt" type="button">C · Nothing, because the warehouse was idle before it arrived</button>
+      <button class="qopt" type="button">D · A full hour at 8 RPU, because Redshift Serverless bills by the RPU-hour</button>
+      <p class="qwhy">"You pay for the workloads you run in RPU-hours on a per-second basis, with a 60-second minimum charge." Five seconds of work buys a full minute (modelled; us-east-1, AWS Price List, 3 October 2026).</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Per-second RPU-hour billing, 60-second minimum, no compute charge when idle</span><span class="note">Amazon Redshift Management Guide, "Billing for Amazon Redshift Serverless", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">One RPU = 16 GB, default base 128, range 4 to 512, 1,024 in five Regions</span><span class="note">Amazon Redshift Management Guide, "Compute capacity for Amazon Redshift Serverless", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Storage billed separately, open connection pools, cancelled queries billed for time run</span><span class="note">Amazon Redshift Management Guide, "Billing for Amazon Redshift Serverless", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">$0.375 per RPU-hour, $0.024 managed storage, $5.00 per TB scanned, $0.023 S3 Standard</span><span class="note">AWS Price List bulk API, us-east-1 offers for AmazonRedshift, AmazonAthena and AmazonS3, retrieved 3 October 2026; re-verify before relying on them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Decoupling storage from compute (BP 11.1)</span><span class="note">AWS Well-Architected Data Analytics Lens (December 22, 2023), read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The Free plan card wording</span><span class="note">AWS Free Tier FAQs, read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Monthly bills, the 31 and 123 break-evens, $0.0500 against $0.0042</span><span class="note">Modelled: real prices and session 4's measured scan share, with busy hours and 8 RPU as assumptions; printed by the script shown</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Free plan coverage for Redshift Serverless</span><span class="note">Not verified; the optional real-account path assumes every RPU-second is billed</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The month-end crunch, the one-busy-hour comparison, the dashboard that never logged off</span><span class="note">Constructed; the billing rules behind each are quoted at source, and the cost of an open pool was not measured</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 6 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Two meters</b><span>Athena: $5.00 per TB scanned, per query. Redshift Serverless: $0.375 per RPU-hour, per second while busy (us-east-1, Price List, 3 Oct 2026).</span></div>
+      <div class="cheat-item"><b>Idle</b><span>No compute charge when no queries run. Storage bills separately: $0.024 per GB-month managed.</span></div>
+      <div class="cheat-item"><b>Capacity</b><span>1 RPU = 16 GB. Default base 128; set 4, or 8 to 512 in steps of 8. Capacity times time is the bill.</span></div>
+      <div class="cheat-item"><b>Break-even (modelled)</b><span>20 GB query vs 8 RPU: about 31 a day at 1 busy hour, about 123 at 4. Busy hours decide it.</span></div>
+      <div class="cheat-item"><b>The minute</b><span>60-second minimum: a 5 s query on an idle 8 RPU warehouse bills $0.0500, not $0.0042.</span></div>
+      <div class="cheat-item"><b>Close the tap</b><span>Open pools can cost with no workload; cancelled queries bill time run. The lake stays in S3: use both.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Tonight priced the engines that answer questions; session 7 turns to the one that writes answers. Bedrock for AI teams validates a Converse request against botocore's own schema without calling a model, prices a million short notes on Nova Micro at $5.32 on demand against $2.66 in batch (modelled volumes), and writes the least-privilege policy for one model.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 6 of 8 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b5-lambda-or-a-container.html">← Prev: Lambda or a container</a> &nbsp;·&nbsp; <a href="b7-bedrock-for-ai-teams.html">Next: Bedrock for AI teams →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+Q2 avg tip by payment type, month
+   csv         10,095,345 bytes  100.00% of the CSV  billed $0.000048
+   parquet        197,417 bytes    1.96% of the CSV  billed $0.000048
+   partitioned    381,251 bytes    3.78% of the CSV  billed $0.000048
+Q3 fares on 15 January
+   csv         10,095,345 bytes  100.00% of the CSV  billed $0.000048
+   parquet        822,585 bytes    8.15% of the CSV  billed $0.000048
+   partitioned      8,968 bytes    0.09% of the CSV  billed $0.000048
+Q4 pickups per zone, 15-21 January
+   csv         10,095,345 bytes  100.00% of the CSV  billed $0.000048
+   parquet        760,406 bytes    7.53% of the CSV  billed $0.000048
+   partitioned     58,887 bytes    0.58% of the CSV  billed $0.000048
+at 1 TB of CSV, Q4 partitioned would scan 6.0 GB
+Q2 answer (partitioned): [(0, 1.4884, 4792), (1, 4.1507, 78236), (2, 0.0005, 14805), (3, 0.0003, 629), (4, 0.0362, 1538)]

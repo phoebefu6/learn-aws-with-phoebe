@@ -1,0 +1,6 @@
+raw/                       1 objects 10,095,345 bytes
+curated/nyc_taxi_flat/     1 objects  2,387,037 bytes
+curated/nyc_taxi/         31 objects  3,023,334 bytes
+one partition key: curated/nyc_taxi/pickup_date=2024-01-15/data_0.parquet
+parquet column chunks: 19 | two columns needed: 172,585 bytes of 2,387,037
+csv must be read whole: 10,095,345 bytes

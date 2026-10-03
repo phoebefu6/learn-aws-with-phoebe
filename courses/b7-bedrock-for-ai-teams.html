@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 7 of 8. Bedrock as an analyst meets it: one Converse request checked against botocore's real schema without calling a model, a million short notes on Nova Micro at $5.32 on demand against $2.66 in batch (modelled volumes), and the least-privilege policy for one model.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Bedrock for AI teams - learn aws with phoebe">
+<meta property="og:description" content="Analyst session 7 of 8. There is no bedrock:Converse IAM action, batch halves the token bill, and some models keep prompts for up to 30 days. A schema-checked request, a token cost model and a one-model policy, all run locally.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/b7-bedrock-for-ai-teams.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bedrock for AI teams - learn aws with phoebe">
+<meta name="twitter:description" content="Analyst session 7 of 8. What Bedrock is today, what a token bill looks like on demand and in batch, and how to let one role call one model and nothing else.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 7 · Bedrock for AI teams - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Analyst session 7 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Analyst track · Session 7 of 8</div>
+    <h1>Bedrock for <span class="accent">AI teams</span></h1>
+    <p class="sub">Sooner or later someone on the data team is asked to "just run the model over the notes". On AWS that usually means Bedrock: managed access to foundation models, billed per token, behind the same IAM that guards the lake. Tonight we build a real Converse request and let botocore check it against Bedrock's own schema without calling any model, price a million short notes on demand and in batch, and write the policy that lets one role call one model. Then we read the data-retention page all the way to the caveat most teams skip.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Applied</span>
+      <span class="chip audience">Data analysts and engineers</span>
+      <span class="chip audience">Python, runs locally, no AWS account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · What Bedrock is, the token bill, one model only</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: a checked request, a cost, a policy</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 6 priced two engines that answer questions with SQL. Bedrock is the engine that writes answers, and it bills a third way: by tokens in and tokens out. The skills carry straight over. Session 2 taught you to read a policy as JSON and to expect an implicit deny wherever nothing allows; session 4 taught you that the unit you are billed on decides the design. Tonight both habits meet a foundation model. Nothing in the build-along touches AWS: the request is real, the check is real, and the reply is fake on purpose and says so.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = run the code yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A one-paragraph answer to "what is Bedrock now", a Converse request that botocore has accepted against Bedrock's real API schema, the token arithmetic behind $5.32 on demand and $2.66 in batch for a million notes (modelled volumes), a policy that allows <code>bedrock:InvokeModel</code> on exactly one foundation-model ARN, and the two data-protection sentences you must quote together, never one without the other.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers what Bedrock is today</span>
+      <h2>A managed front door to many models</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">The Bedrock User Guide, "What is Amazon Bedrock?", opens with "a fully managed service that provides secure, enterprise-grade access to high-performing foundation models", and says it "supports 100+ foundation models". Your code does not host a model, size a GPU or patch a server. It sends a request to the <code>bedrock-runtime</code> endpoint, IAM decides whether your role may call that model, and you pay for the tokens. Everything else on the platform, retrieval, safeguards, customization, batch jobs, is an optional layer around that one call.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 352" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The path of one Bedrock request. A notebook using a boto3 client with an analyst's role sends a request to an IAM check, which asks whether bedrock:InvokeModel is allowed on this model's ARN; with no Allow the result is an implicit deny. If allowed, the request reaches the highlighted Converse operation on the bedrock-runtime endpoint, messages in and text out, which passes it to a foundation model such as amazon.nova-micro-v1:0. The reply and its token usage return to the notebook. Two optional boxes hang below the Converse call: Guardrails, configurable safeguards, and a Knowledge Base for retrieval-augmented generation. Notes: batch inference sends many prompts as an asynchronous job at a 50 percent lower price; Bedrock Agents, now Agents Classic, is no longer open to new customers and its successor is AgentCore.">
+        <defs>
+          <filter id="b7aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="79" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b7aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b7aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b7aH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b7aL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b7aS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b7aB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b7aA { font: 700 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #183177; }
+          .b7aN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b7aH" x="30" y="26">ONE REQUEST, FROM YOUR NOTEBOOK TO A FOUNDATION MODEL AND BACK</text>
+
+        <g filter="url(#b7aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M750 92 L750 74 L105 74 L105 88" marker-end="url(#b7aAr)" stroke="#2B4A9A" stroke-width="1.8"/>
+          <rect x="30" y="94" width="150" height="66" rx="8" transform="rotate(-1.2 105 127)" fill="#FFFFFF"/>
+          <rect x="220" y="94" width="160" height="66" rx="8" transform="rotate(0.8 300 127)" fill="#FFFFFF"/>
+          <rect x="420" y="94" width="190" height="66" rx="8" transform="rotate(-0.6 515 127)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="650" y="94" width="200" height="66" rx="8" transform="rotate(0.7 750 127)" fill="#EEF1FA"/>
+          <path d="M184 127 L214 127" marker-end="url(#b7aAr)"/>
+          <path d="M384 127 L414 127" marker-end="url(#b7aAr)"/>
+          <path d="M614 127 L644 127" marker-end="url(#b7aAr)"/>
+          <path d="M470 164 L470 210" stroke-dasharray="5 5" stroke="#4E5A6B" stroke-width="1.6"/>
+          <path d="M600 164 L700 210" stroke-dasharray="5 5" stroke="#4E5A6B" stroke-width="1.6"/>
+          <rect x="400" y="214" width="200" height="54" rx="7" transform="rotate(-0.8 500 241)" fill="#FFFFFF" stroke-dasharray="6 4"/>
+          <rect x="640" y="214" width="210" height="54" rx="7" transform="rotate(0.9 745 241)" fill="#FFFFFF" stroke-dasharray="6 4"/>
+        </g>
+
+        <text class="b7aA" x="300" y="64">reply + token usage come back the same way</text>
+
+        <text class="b7aL" x="44" y="120">Your notebook</text>
+        <text class="b7aS" x="44" y="138">boto3 client</text>
+        <text class="b7aS" x="44" y="153">an IAM role</text>
+
+        <text class="b7aL" x="234" y="120">IAM check</text>
+        <text class="b7aS" x="234" y="138">bedrock:InvokeModel</text>
+        <text class="b7aS" x="234" y="153">on this model ARN?</text>
+        <text class="b7aS" x="220" y="186">no Allow: implicit deny</text>
+
+        <text class="b7aL" x="434" y="120">Converse</text>
+        <text class="b7aB" x="434" y="138">on bedrock-runtime</text>
+        <text class="b7aB" x="434" y="153">messages in, text out</text>
+
+        <text class="b7aL" x="668" y="122">Foundation model</text>
+        <text class="b7aS" x="668" y="142">amazon.nova-micro-v1:0</text>
+
+        <text class="b7aL" x="414" y="238">Guardrails (optional)</text>
+        <text class="b7aS" x="414" y="256">configurable safeguards</text>
+        <text class="b7aL" x="654" y="238">Knowledge Base (optional)</text>
+        <text class="b7aS" x="654" y="256">retrieval, the RAG layer</text>
+
+        <text class="b7aN" x="30" y="300">Batch inference: many prompts as one asynchronous job, at a 50% lower price than on-demand.</text>
+        <text class="b7aN" x="30" y="320">Bedrock Agents, now Agents Classic, is no longer open to new customers; the successor is AgentCore.</text>
+        <text class="b7aS" x="30" y="340">Amazon Bedrock User Guide, read at source 3 October 2026. Model availability changes: re-verify.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - IAM sits in front of the model; everything dashed is a layer you add, not a toll you pay by default</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What the overview says now, and what it stopped saying<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Bedrock is "a fully managed service that provides secure, enterprise-grade access to high-performing foundation models from leading AI companies", and it "supports 100+ foundation models from industry-leading providers". Those are the two sentences to quote. One phrase you may remember from older slides, Bedrock as a "single API", is no longer on the overview page, and neither is a tidy bullet list of capabilities; each capability below was read on its own page. Older decks are not wrong about history, they are just not the current page, so quote the current one.</p>
+        <p>For an analyst the working idea is simple: the provider trained the model, AWS runs it, and you rent it a request at a time. Which models are offered in which Region changes often enough that AWS tells you to check, and so do these pages: re-verify model availability before you plan around one.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Converse: one request shape you can reuse<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The build-along calls the <code>converse</code> operation on a <code>bedrock-runtime</code> client. Its request is a model ID, a list of <code>messages</code>, each with a <code>role</code> and a list of <code>content</code> blocks, and an optional <code>inferenceConfig</code> such as <code>maxTokens</code> and <code>temperature</code>. The point of Converse is that this messages shape stays the same across the models that support it, so switching from one model to another is mostly a change of <code>modelId</code>, not a rewrite of your request code. Support is per model, and so are some features: check the model you choose before you rely on it.</p>
+        <p>Keep one distinction from session 2 in mind. Converse is an API operation. It is not, as Part 3 shows, the name of an IAM action.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The four optional layers, in one line each<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <ul>
+          <li><strong>Knowledge Bases.</strong> Bedrock's RAG layer. The guide: "RAG is a technique that uses information from data sources to improve the relevancy and accuracy of generated responses."</li>
+          <li><strong>Guardrails.</strong> "Amazon Bedrock Guardrails provides configurable safeguards to help you build safe generative AI applications."</li>
+          <li><strong>Model customization.</strong> "the process of providing training data to a model to improve its performance for specific use-cases", by supervised fine-tuning, reinforcement fine-tuning or distillation.</li>
+          <li><strong>Batch inference.</strong> "With batch inference, you can submit multiple prompts and generate responses asynchronously." One limit worth knowing early: "Batch inference isn't supported for provisioned models."</li>
+        </ul>
+        <p>And one that is closing: "Amazon Bedrock Agents (now Amazon Bedrock Agents Classic) is no longer open to new customers." The named successor is Amazon Bedrock AgentCore. If a design document written before that change says "we will use Bedrock Agents", it needs a second look. How to serve and scale models on your own GPUs is a different subject, taught in <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/">learn-ai-infra</a>; tracking, versioning and promoting models belongs to <a href="https://phoebefu6.github.io/learn-dataops-with-phoebe/">learn-dataops</a>; Claude on Bedrock specifically is covered in <a href="https://phoebefu6.github.io/learn-claude-with-phoebe/courses/68-bedrock-vertex.html">learn-claude session 68</a>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The plan built on last year's blog post.</strong> A team scopes a support assistant around Bedrock Agents, working from a tutorial that was accurate when it was written. In the new account the Agents console tells them what the user guide now says: Agents Classic is no longer open to new customers, and AgentCore is the successor. Two weeks of design assumed a door that had closed. The fix is cheap if it happens on day one: read the current user guide page for every capability in the plan before anyone draws boxes. The scenario is constructed; the Agents Classic sentence is quoted from the Amazon Bedrock User Guide.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the token bill</span>
+      <h2>Tokens in, tokens out, and when to wait for half price</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Bedrock bills per token, and input and output are priced separately. Amazon Nova Micro on demand is $0.000035 per 1,000 input tokens and $0.00014 per 1,000 output tokens; in batch, $0.0000175 and $0.00007. All of these are us-east-1, AWS Price List, 3 October 2026, and prices change, so re-verify them before relying on them. The build-along applies them to a classification job: a million short notes, 120 tokens in and 8 tokens out each. Those volumes are an assumption, not a measurement; your numbers will differ.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 364" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two horizontal bars, modelled cost of classifying 1,000,000 notes on Nova Micro with 120 input and 8 output tokens each. The on-demand bar totals 5.32 dollars: 4.20 dollars of input and 1.12 dollars of output. The highlighted batch bar totals 2.66 dollars: 2.10 dollars of input and 0.56 dollars of output, exactly half. A scale runs from 0 to 6 dollars. Below, the arithmetic: per note, 120 input tokens at 0.000035 dollars per thousand plus 8 output tokens at 0.00014 dollars per thousand is 0.00000532 dollars; times a million is 5.32 dollars; batch halves both rates. Flex tier is a 50 percent discount to Standard and Priority a 75 percent premium. Prices us-east-1, AWS Price List, 3 October 2026.">
+        <defs>
+          <filter id="b7bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="83" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b7bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b7bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b7bH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b7bL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b7bS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b7bB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b7bV { font: 800 18px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #0E1F52; }
+          .b7bA { font: 700 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #183177; }
+          .b7bN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b7bH" x="30" y="26">1,000,000 NOTES ON NOVA MICRO, 120 TOKENS IN AND 8 OUT EACH (MODELLED VOLUMES)</text>
+
+        <g filter="url(#b7bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="170" y="52" width="420" height="36" rx="3" transform="rotate(-0.3 380 70)" fill="#EEF1FA"/>
+          <rect x="590" y="52" width="112" height="36" rx="3" transform="rotate(0.4 646 70)" fill="url(#b7bHc)"/>
+          <rect x="170" y="134" width="210" height="36" rx="3" transform="rotate(0.3 275 152)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="380" y="134" width="56" height="36" rx="3" transform="rotate(-0.4 408 152)" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M170 222 L770 222 M170 216 L170 228 M370 216 L370 228 M570 216 L570 228 M770 216 L770 228" stroke="#4E5A6B" stroke-width="1.4"/>
+        </g>
+
+        <text class="b7bL" x="30" y="68">On-demand</text>
+        <text class="b7bS" x="30" y="84">Standard tier</text>
+        <text class="b7bV" x="716" y="78">$5.32</text>
+        <text class="b7bS" x="170" y="106">input: 120 tokens, $4.20</text>
+        <text class="b7bS" x="590" y="106">output: 8 tokens, $1.12</text>
+
+        <text class="b7bL" x="30" y="150">Batch</text>
+        <text class="b7bS" x="30" y="166">async job</text>
+        <text class="b7bV" x="450" y="160">$2.66</text>
+        <text class="b7bB" x="170" y="188">input $2.10</text>
+        <text class="b7bB" x="380" y="188">output $0.56</text>
+
+        <text class="b7bS" x="170" y="244" text-anchor="middle">$0</text>
+        <text class="b7bS" x="370" y="244" text-anchor="middle">$2</text>
+        <text class="b7bS" x="570" y="244" text-anchor="middle">$4</text>
+        <text class="b7bS" x="770" y="244" text-anchor="middle">$6</text>
+
+        <text class="b7bA" x="30" y="274">THE TOKEN ARITHMETIC</text>
+        <text class="b7bN" x="30" y="294">Per note: 120 x $0.000035/1K + 8 x $0.00014/1K = $0.0000042 + $0.00000112 = $0.00000532</text>
+        <text class="b7bN" x="30" y="314">x 1,000,000 notes = $5.32 on demand. Batch halves both rates ($0.0000175, $0.00007): $2.66.</text>
+        <text class="b7bN" x="30" y="334">Tiers: Flex is a 50% discount to Standard, Priority a 75% premium.</text>
+        <text class="b7bS" x="30" y="354">us-east-1, AWS Price List, 3 October 2026; re-verify. Volumes and token counts are assumptions.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - input tokens are most of this bill, and batch takes exactly half off both halves</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Read the bill from the inside<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Per note, 120 input tokens at $0.000035 per 1,000 is $0.0000042, and 8 output tokens at $0.00014 per 1,000 is $0.00000112. Add them and multiply by a million: $5.32 on demand. Two things jump out.</p>
+        <ul>
+          <li><strong>Input dominates here.</strong> Output tokens cost four times as much each, but a classifier writes almost nothing back, so $4.20 of the $5.32 is input. Trim the prompt and the bill moves; trim the answer and it barely does. A summariser, which writes long answers, would flip that balance.</li>
+          <li><strong>Batch is exactly half.</strong> The pricing page: batch inference is offered "at a 50% lower price compared to on-demand inference pricing". The batch rates in the Price List are half the on-demand ones, so the same job is $2.66.</li>
+        </ul>
+        <p>All modelled: real prices (us-east-1, AWS Price List, 3 October 2026; re-verify), assumed volumes and token counts. A real tokenizer will count your notes differently, so measure a sample before you quote a total.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>On demand, batch, Flex or Priority<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The pricing page lists "a variety of tiers including Standard, Flex, Priority, and Reserved tiers". Its footnotes give the two you will be asked about: "Flex tier pricing is at 50% discount to Standard tier pricing" and "Priority tier pricing is at 75% premium to Standard tier pricing". Batch is a separate route, a job you submit and collect later, at 50% below on demand.</p>
+        <p>The decision is about waiting, not about the model. A backlog of a million notes that nobody reads until Monday does not need an answer in a second, so batch halves it for free. A chatbot answering a customer cannot wait for a job to finish. Which tiers a given model offers, and their exact rates for it, were not verified on these pages: check the pricing page for your model before you plan on Flex or Priority.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where the cheaper model fits<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Price List also carries Nova Lite at $0.00006 per 1,000 input tokens and $0.00024 per 1,000 output, both on demand (us-east-1, AWS Price List, 3 October 2026; re-verify). That is a little under twice Nova Micro's rates. Whether the extra quality is worth it for your notes is not a price question: it is an evaluation you run on a labelled sample, and these pages did not run one. The useful habit is to price both before the evaluation, so the team knows what a better answer has to be worth. How to track those evaluation runs and promote a model choice is the territory of <a href="https://phoebefu6.github.io/learn-dataops-with-phoebe/">learn-dataops</a>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The backlog that ran on demand overnight.</strong> An analyst is asked to tag a year of support notes by Monday. She writes a loop that calls the model one note at a time, leaves it running over the weekend, and it works. Nobody needed the answers before Monday morning, which is exactly the shape batch inference exists for: submit the prompts as one job, collect the responses later, pay half. On the modelled million notes that is $5.32 against $2.66, small money; at a hundred times the volume, or with a model priced many times higher, it is a line someone will ask about. The scenario is constructed; your numbers will differ.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers least privilege and your data</span>
+      <h2>Let one role call one model, and know where the prompt goes</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Here is the fact that trips up teams writing their first Bedrock policy: there is no <code>bedrock:Converse</code> IAM action. The AWS service reference for Bedrock lists 262 actions, and for inference it lists <code>InvokeModel</code> and <code>InvokeModelWithResponseStream</code>. A Converse call is authorised by <code>bedrock:InvokeModel</code>. So a least-privilege policy names that action and one foundation-model ARN, and nothing else. Then comes the second question every security reviewer asks: what happens to the prompt?</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 418" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three requests checked against one policy that allows bedrock:InvokeModel on the single ARN arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0. Request 1: the analyst-lake-read role from the session 8 bench asks for bedrock:InvokeModel on Nova Micro; no statement allows any bedrock action, so the verdict is an implicit deny. Request 2: a notes-classifier role carrying the policy makes a Converse call on Nova Micro; Converse is checked as InvokeModel, the action and resource match, and the highlighted verdict is Allow. Request 3: the same role calls Converse on amazon.nova-lite-v1:0; the ARN names one model only, so the verdict is an implicit deny. Below, a box on what happens to the prompt: model providers do not have access to Bedrock logs or customer prompts and completions; content is not used to improve the base models; but for some models prompts and completions are retained within the AWS boundary for up to 30 days and may be reviewed by AWS.">
+        <defs>
+          <filter id="b7cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="89" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b7cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b7cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b7cH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b7cL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b7cS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b7cB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b7cA { font: 700 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #183177; }
+          .b7cN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b7cH" x="30" y="26">THREE REQUESTS, ONE POLICY</text>
+        <text class="b7cA" x="30" y="44">Allow bedrock:InvokeModel on arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0</text>
+
+        <g filter="url(#b7cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="60" width="330" height="48" rx="7" transform="rotate(-0.6 195 84)" fill="#FFFFFF"/>
+          <rect x="30" y="126" width="330" height="48" rx="7" transform="rotate(0.5 195 150)" fill="#FFFFFF"/>
+          <rect x="30" y="192" width="330" height="48" rx="7" transform="rotate(-0.4 195 216)" fill="#FFFFFF"/>
+          <path d="M366 88 L552 88" marker-end="url(#b7cAr)"/>
+          <path d="M366 154 L552 154" marker-end="url(#b7cAr)"/>
+          <path d="M366 220 L552 220" marker-end="url(#b7cAr)"/>
+          <rect x="560" y="60" width="290" height="48" rx="7" transform="rotate(0.7 705 84)" fill="#EEF1FA"/>
+          <rect x="560" y="126" width="290" height="48" rx="7" transform="rotate(-0.8 705 150)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="560" y="192" width="290" height="48" rx="7" transform="rotate(0.6 705 216)" fill="#EEF1FA"/>
+          <rect x="30" y="272" width="820" height="100" rx="9" transform="rotate(-0.2 440 322)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="b7cL" x="44" y="80">analyst-lake-read (session 8 bench)</text>
+        <text class="b7cS" x="44" y="98">bedrock:InvokeModel on nova-micro</text>
+        <text class="b7cS" x="380" y="78">Action + Resource match?</text>
+        <text class="b7cL" x="574" y="80">Implicit deny</text>
+        <text class="b7cS" x="574" y="98">no statement allows any bedrock action</text>
+
+        <text class="b7cL" x="44" y="146">notes-classifier role + this policy</text>
+        <text class="b7cS" x="44" y="164">Converse on amazon.nova-micro-v1:0</text>
+        <text class="b7cS" x="380" y="144">Action + Resource match?</text>
+        <text class="b7cL" x="574" y="146">Allow</text>
+        <text class="b7cB" x="574" y="164">Converse is checked as InvokeModel</text>
+
+        <text class="b7cL" x="44" y="212">same role, a different model</text>
+        <text class="b7cS" x="44" y="230">Converse on amazon.nova-lite-v1:0</text>
+        <text class="b7cS" x="380" y="210">Action + Resource match?</text>
+        <text class="b7cL" x="574" y="212">Implicit deny</text>
+        <text class="b7cS" x="574" y="230">the ARN names one model only</text>
+
+        <text class="b7cH" x="48" y="296">WHERE THE PROMPT GOES: QUOTE BOTH SENTENCES, ALWAYS TOGETHER</text>
+        <text class="b7cL" x="48" y="318">Model providers "don't have access to Amazon Bedrock logs or to customer prompts and completions."</text>
+        <text class="b7cL" x="48" y="338">"Your content is not used to improve the base models and is not shared with any model providers."</text>
+        <text class="b7cB" x="48" y="360">BUT for some models, AWS retains prompts and completions up to 30 days and may review them.</text>
+
+        <text class="b7cN" x="30" y="396">No bedrock:Converse action exists: the service reference lists 262 Bedrock actions.</text>
+        <text class="b7cS" x="30" y="412">Verdicts follow the IAM evaluation order from session 2; the role names are illustrative.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - one action, one ARN: the only request that passes is the one the policy names</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The policy, and the action it has to name<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The build-along prints the statement that matters:</p>
+        <div class="prompt-box good"><span class="label">★ One model only</span>{"Sid": "OneModelOnly", "Effect": "Allow",
+ "Action": ["bedrock:InvokeModel"],
+ "Resource": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0"}</div>
+        <p>Notice the empty account field in the ARN, the <code>::</code> after the Region: foundation models belong to no customer account. If someone writes <code>"Action": "bedrock:Converse"</code>, the policy names an action the service reference does not list, so it grants nothing, and every call fails with access denied while the author swears the policy is attached. If the team streams replies with the streaming variant of the call, add <code>bedrock:InvokeModelWithResponseStream</code> on the same ARN, and only then.</p>
+        <p>Session 8's bench already holds the proof of the default. Its analyst role, <code>analyst-lake-read</code>, is checked against 24 data-team actions, and one of them is <code>bedrock:InvokeModel</code> on this exact Nova Micro ARN. The role allows 7 of the 24, none of them Bedrock: implicit deny. The concepts behind giving each workload its own narrow role are taught in <a href="https://phoebefu6.github.io/learn-data-access-control-with-phoebe/">learn-data-access-control</a>; here we only write the JSON.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>What happens to the prompt: teach both halves<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The reassuring half, from "Data protection" and the Bedrock FAQs: model providers "don't have access to Amazon Bedrock logs or to customer prompts and completions", and "With Amazon Bedrock, your content is not used to improve the base models and is not shared with any model providers." The FAQs add that AWS and the providers "will not use any inputs to or outputs from Amazon Bedrock to train Amazon Nova, Amazon Titan, or any third-party models."</p>
+        <p>The half that gets dropped from slides, from "Data retention": for some models, prompts and completions "are retained within the AWS boundary for up to 30 days and may be reviewed by AWS". Both statements are true at once. Providers do not see your prompts, and your content does not train base models; and for certain models AWS itself keeps them for up to 30 days and may review them. These pages did not record which models carry that retention, and the list can change, so read the "Data retention" page for the exact model you plan to send sensitive notes to, before you send them.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the mock and the stub cannot tell you<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The build-along proves your request has the right shape, because botocore checks it against the Bedrock API model shipped inside the library. It does not prove the call would be authorised: no IAM engine runs, and the dummy keys would be rejected by real AWS. It does not prove the model is enabled in your account, or available in your Region. And the reply is a canned string, so it proves nothing about what the model would say. Session 2's moto run had the same honesty problem from the other side: moto's IAM enforcement is a teaching aid, not AWS's engine. Session 8's bench is where the policy evaluation is checked against the documented rules, case by case.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The team that assumed AWS never keeps prompts.</strong> A team pastes the "not shared with any model providers" sentence into its data-protection review and sends customer complaint text to a model, satisfied that nobody else will see it. A reviewer later reads the "Data retention" page and finds that for some models AWS retains prompts and completions for up to 30 days and may review them. Nothing leaked and no rule was broken, but the review had promised more than the documentation does, and it had to be reopened. The fix was to quote both sentences and name the model checked. The scenario is constructed; both sentences are quoted from the Amazon Bedrock User Guide and FAQs.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>A checked request, a cost and a policy, with no model called</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">One Python file, about forty lines, using the <code>boto3</code> you installed in session 1. It builds a real Converse request for Nova Micro and hands it to botocore's <code>Stubber</code>: botocore validates every field against Bedrock's real API schema, and the Stubber answers with a reply that is fake and says STUBBED in its own text. Then it sends a deliberately broken request to see the schema catch it, prices the million-note job, and prints the one-model policy. The output below is pasted from a real run of exactly this code. Before you run it, guess which of the two requests botocore rejects, and why.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 262" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along pipeline. A request dictionary with modelId, messages and inferenceConfig goes into the highlighted box, botocore's check against the real Converse schema before anything is sent. A valid request reaches the Stubber, which returns canned text labelled STUBBED. The script then prints four lines: the schema result, the malformed-request error, the cost of a million notes, and the one-model policy. A branch shows a malformed request, content given as a plain string instead of a list of blocks, stopped by ParamValidationError. Nothing leaves the laptop: the keys are dummies and no model is called.">
+        <defs>
+          <filter id="b7dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="97" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b7dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b7dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b7dH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b7dL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b7dS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b7dB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b7dW { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #FFFFFF; }
+          .b7dN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b7dH" x="30" y="30">WHAT THE SCRIPT DOES: A REAL SCHEMA CHECK, A FAKE REPLY, TWO PRINTED FACTS</text>
+
+        <g filter="url(#b7dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="50" width="170" height="86" rx="8" transform="rotate(-1 115 93)" fill="#FFFFFF"/>
+          <rect x="230" y="50" width="190" height="86" rx="8" transform="rotate(0.8 325 93)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="450" y="50" width="180" height="86" rx="8" transform="rotate(-0.6 540 93)" fill="#EEF1FA"/>
+          <rect x="660" y="50" width="190" height="86" rx="8" transform="rotate(0.5 755 93)" fill="#183177" stroke="#183177"/>
+          <path d="M206 93 L224 93" marker-end="url(#b7dAr)"/>
+          <path d="M426 93 L444 93" marker-end="url(#b7dAr)"/>
+          <path d="M636 93 L654 93" marker-end="url(#b7dAr)"/>
+          <path d="M325 142 L325 168" marker-end="url(#b7dAr)"/>
+          <rect x="230" y="174" width="190" height="46" rx="7" transform="rotate(-0.9 325 197)" fill="#FEF2F2" stroke="#FCA5A5"/>
+        </g>
+
+        <text class="b7dL" x="44" y="76">The request</text>
+        <text class="b7dS" x="44" y="98">modelId, messages</text>
+        <text class="b7dS" x="44" y="118">inferenceConfig</text>
+
+        <text class="b7dL" x="244" y="76">botocore checks it</text>
+        <text class="b7dB" x="244" y="98">real Converse schema</text>
+        <text class="b7dB" x="244" y="118">before any send</text>
+
+        <text class="b7dL" x="464" y="76">Stubber replies</text>
+        <text class="b7dS" x="464" y="98">canned text, labelled</text>
+        <text class="b7dS" x="464" y="118">STUBBED</text>
+
+        <text class="b7dW" x="674" y="76">Prints four lines</text>
+        <text class="b7dW" x="674" y="100">schema, error,</text>
+        <text class="b7dW" x="674" y="120">cost, policy</text>
+
+        <text class="b7dL" x="244" y="194">content as a plain string</text>
+        <text class="b7dS" x="244" y="211">ParamValidationError</text>
+        <text class="b7dS" x="440" y="202">malformed: stopped before it could ever be sent</text>
+
+        <text class="b7dN" x="30" y="248">Nothing leaves your laptop: the keys are dummies, no model is called, and the reply says it is fake.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange box is the real part; the reply after it is deliberately fake</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Reuse the environment from analyst session 1.</strong> Same folder, same <code>.venv</code>, with boto3 and botocore 1.43.108 already installed. This script reads no files and needs no AWS account; the access keys in it are the literal string <code>x</code>. It was run on Python 3.11.11.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · setup (verified 3 October 2026)</span>. .venv/bin/activate
+python -c "import boto3, botocore; print(boto3.__version__, botocore.__version__)"   # expect 1.43.108 1.43.108</div>
+      </div>
+      <div class="step">
+        <p><strong>Build the client and the request.</strong> A <code>bedrock-runtime</code> client in us-east-1 with dummy keys, and a Converse request: the model ID, one user message whose <code>content</code> is a list of blocks, and an <code>inferenceConfig</code> that caps the reply at 20 tokens with temperature 0, which is what you want from a classifier.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · b7_bedrock.py, part 1</span># Analyst session 7 - Bedrock for AI teams. No model is called: botocore checks the request against
+# Bedrock's real API schema, and a Stubber stands in for the response (clearly fake).
+import json, boto3
+from botocore.stub import Stubber
+
+MODEL = "amazon.nova-micro-v1:0"
+rt = boto3.client("bedrock-runtime", region_name="us-east-1", aws_access_key_id="x", aws_secret_access_key="x")
+request = {
+    "modelId": MODEL,
+    "messages": [{"role": "user", "content": [{"text": "Classify this trip note as fare_dispute, lost_item or other: 'driver kept my umbrella'"}]}],
+    "inferenceConfig": {"maxTokens": 20, "temperature": 0},
+}</div>
+      </div>
+      <div class="step">
+        <p><strong>Let botocore check it, and break it on purpose.</strong> Inside the <code>with Stubber(rt)</code> block, botocore validates the request against Bedrock's real Converse schema, and the Stubber also asserts that the call matches the request it was told to expect. Only then does it hand back the canned reply, which says STUBBED in its own text so nobody mistakes it for a model's answer. The usage numbers in the stub are made up too. The second call passes <code>content</code> as a plain string, which the schema forbids.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · b7_bedrock.py, part 2</span>with Stubber(rt) as stub:
+    stub.add_response("converse", {
+        "output": {"message": {"role": "assistant", "content": [{"text": "lost_item (STUBBED, not a model output)"}]}},
+        "stopReason": "end_turn", "usage": {"inputTokens": 31, "outputTokens": 4, "totalTokens": 35}, "metrics": {"latencyMs": 0},
+    }, request)
+    r = rt.converse(**request)
+    print("request accepted by the Converse schema; stubbed reply:", r["output"]["message"]["content"][0]["text"])
+try:
+    rt.converse(modelId=MODEL, messages=[{"role": "user", "content": "plain string"}])
+except Exception as e:
+    print("schema check catches a malformed request:", type(e).__name__)</div>
+      </div>
+      <div class="step">
+        <p><strong>Price the backlog and print the policy.</strong> Four Price List rates per 1,000 tokens, one assumed workload, two totals. Then the least-privilege statement, built in Python so the model ID is typed once and reused in the ARN.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · b7_bedrock.py, part 3</span># The cost of classifying a backlog, at Price List rates (us-east-1, retrieved 2026-10-03), per 1K tokens
+IN_OD, OUT_OD, IN_BATCH, OUT_BATCH = 0.000035, 0.00014, 0.0000175, 0.00007
+notes, tok_in, tok_out = 1_000_000, 120, 8          # your volumes and token counts will differ: assumptions
+od = notes * (tok_in * IN_OD + tok_out * OUT_OD) / 1000
+batch = notes * (tok_in * IN_BATCH + tok_out * OUT_BATCH) / 1000
+print(f"1,000,000 notes on Nova Micro: on-demand ${od:,.2f}, batch ${batch:,.2f}")
+
+# There is no bedrock:Converse IAM action: the AWS service reference lists 262 Bedrock actions and
+# only InvokeModel and InvokeModelWithResponseStream for inference, so Converse is authorised by InvokeModel.
+LEAST = {"Version": "2012-10-17", "Statement": [{"Sid": "OneModelOnly", "Effect": "Allow",
+         "Action": ["bedrock:InvokeModel"],
+         "Resource": f"arn:aws:bedrock:us-east-1::foundation-model/{MODEL}"}]}
+print(json.dumps(LEAST["Statement"][0]["Action"]), "on", LEAST["Statement"][0]["Resource"])</div>
+      </div>
+      <div class="step">
+        <p><strong>Run it and compare with this real output.</strong> Nothing here is measured or timed, so your output matches line for line unless you changed an input. Read the first line twice: "accepted by the Converse schema" is real, "STUBBED" is the fake reply announcing itself.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · python b7_bedrock.py (real output)</span>request accepted by the Converse schema; stubbed reply: lost_item (STUBBED, not a model output)
+schema check catches a malformed request: ParamValidationError
+1,000,000 notes on Nova Micro: on-demand $5.32, batch $2.66
+["bedrock:InvokeModel"] on arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0</div>
+      </div>
+      <div class="step">
+        <p><strong>Now make the prompt longer.</strong> Real classification prompts carry instructions and a few examples. Change <code>tok_in</code> from 120 to 600 and rerun. Before you do, reason it out: input was $4.20 of the $5.32, so five times the input should take the on-demand total to about five times $4.20 plus the unchanged $1.12, with batch exactly half. Then read your printed line, and label it modelled.</p>
+        <div class="prompt-box good"><span class="label">★ Step 6 · edit one line, rerun</span>notes, tok_in, tok_out = 1_000_000, 600, 8          # a longer prompt with instructions and examples</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>On a real Free Tier account (optional).</strong> Needs an AWS account: AWS says most new customers are not asked for a card on the Free plan, some are, and a Paid plan needs one. Three things change from the stub. First, model access must be enabled for Nova Micro in the Bedrock console, in us-east-1, before any call succeeds. Second, your user or role needs the policy from Step 4 attached, and real credentials in place of the <code>x</code> keys. Third, remove the <code>Stubber</code> block and call <code>rt.converse(**request)</code> directly: the reply is then a real model output, and the <code>usage</code> field reports real token counts. These pages did not verify any Free plan coverage for Bedrock, so assume every token is billed. At $0.000035 per 1,000 input tokens and $0.00014 per 1,000 output on demand (us-east-1, AWS Price List, 3 October 2026; prices change, so re-verify before relying on them), one call of about 120 tokens in and 8 out costs about $0.0000053 (modelled), a tiny fraction of a cent. Check the "Data retention" page for Nova Micro before you send anything you would not want retained, and detach the policy when you are done.</p>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The policy that grants nothing</span>{"Effect": "Allow", "Action": "bedrock:Converse", "Resource": "*"}
+# No such action: the service reference lists InvokeModel and InvokeModelWithResponseStream for inference.
+# Every Converse call is still denied, and the wildcard Resource would have been too broad anyway.</div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 8</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Price a summariser.</strong> Change the workload to 10,000 documents at 2,000 input tokens and 300 output tokens each. Predict first which half of the bill now dominates, then run it and write both totals, labelled modelled.</li>
+      <li><strong>Break the request three ways.</strong> Remove <code>role</code> from the message, set <code>maxTokens</code> to a string, and misspell <code>inferenceConfig</code>. Note which of the three botocore catches and what it names. Anything it lets through is something only the real service would reject.</li>
+      <li><strong>Add streaming, narrowly.</strong> Extend the <code>LEAST</code> policy so the same role may also stream replies from the same model, and no other. Write the one-sentence reason a reviewer should accept it.</li>
+      <li><strong>Write the data paragraph.</strong> For one real or planned AI workload on your team, write three sentences for a data-protection review: what the providers see, whether content trains base models, and what the "Data retention" page says for the specific model you would use. Quote, do not paraphrase.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 7 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · A role must be allowed to make Converse calls to Nova Micro and nothing else. Which IAM action does the policy name?</p>
+      <button class="qopt" type="button">A · <code>bedrock:Converse</code>, because that is the API operation the code calls</button>
+      <button class="qopt" type="button">B · <code>bedrock:*</code>, because Converse spans several actions</button>
+      <button class="qopt" type="button">C · <code>bedrock:InvokeModel</code>, on that one foundation-model ARN</button>
+      <button class="qopt" type="button">D · <code>bedrock-runtime:Converse</code>, because the call goes to the runtime endpoint</button>
+      <p class="qwhy">There is no <code>bedrock:Converse</code> IAM action. The AWS service reference lists 262 Bedrock actions, with InvokeModel and InvokeModelWithResponseStream for inference, so Converse is authorised by <code>bedrock:InvokeModel</code>, scoped to one ARN.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">2 · A million notes must be tagged by Monday, and nobody reads the tags before then. On demand, the modelled job is $5.32. What does batch inference change?</p>
+      <button class="qopt" type="button">A · Nothing on price; batch only changes how results are delivered</button>
+      <button class="qopt" type="button">B · The price halves, to $2.66, and responses arrive asynchronously instead of per call</button>
+      <button class="qopt" type="button">C · It switches to a smaller model, which is why it is cheaper</button>
+      <button class="qopt" type="button">D · It adds the 75% Priority premium, because the job is large</button>
+      <p class="qwhy">The pricing page offers batch "at a 50% lower price compared to on-demand inference pricing", and the batch rates in the Price List are half the on-demand ones. Same model, same tokens, a job you collect later (modelled volumes; us-east-1, AWS Price List, 3 October 2026).</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · A review states: "AWS never keeps our prompts." What do the Bedrock documents actually support?</p>
+      <button class="qopt" type="button">A · The statement as written, because content is not shared with model providers</button>
+      <button class="qopt" type="button">B · The opposite: every prompt is used to improve the base models</button>
+      <button class="qopt" type="button">C · That model providers can read prompts for 30 days, then they are deleted</button>
+      <button class="qopt" type="button">D · Providers do not see prompts and content does not train base models, but for some models AWS retains prompts and completions for up to 30 days and may review them</button>
+      <p class="qwhy">Both halves are on the record. "Data protection" and the FAQs: providers have no access to prompts and completions, and content is not used to improve base models. "Data retention": for some models they "are retained within the AWS boundary for up to 30 days and may be reviewed by AWS". Check the page for your model.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Fully managed access to foundation models, 100+ models; no "single API" phrase on the current page</span><span class="note">Amazon Bedrock User Guide, "What is Amazon Bedrock?", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Knowledge Bases, Guardrails, customization methods, Agents Classic closed with AgentCore as successor</span><span class="note">Amazon Bedrock User Guide, the capability pages, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Batch inference, asynchronous, not for provisioned models, 50% lower price; Flex 50% discount, Priority 75% premium</span><span class="note">Amazon Bedrock User Guide, "Batch inference"; Bedrock pricing page, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Nova Micro $0.000035 and $0.00014 per 1K on demand, $0.0000175 and $0.00007 in batch; Nova Lite $0.00006 and $0.00024</span><span class="note">AWS Price List bulk API, us-east-1 offer for AmazonBedrock, retrieved 3 October 2026; re-verify before relying on them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">No bedrock:Converse action; of 262 Bedrock actions, InvokeModel and its streaming variant cover inference</span><span class="note">AWS service reference JSON for Bedrock, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Providers do not see prompts; content not used to improve base models; up to 30 days retention for some models</span><span class="note">Amazon Bedrock User Guide, "Data protection" and "Data retention"; Bedrock FAQs, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Schema-checked request, ParamValidationError, $5.32 and $2.66, the one-model policy</span><span class="note">Measured: real output of b7_bedrock.py on boto3 and botocore 1.43.108; the reply is stubbed and the volumes are modelled</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The analyst role denies bedrock:InvokeModel (7 of 24 actions allowed, none Bedrock)</span><span class="note">Measured: the session 8 IAM bench, node and Python agreeing</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The Free plan card wording</span><span class="note">AWS Free Tier FAQs, read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Which models need 30-day retention; tier availability per model; Free plan coverage for Bedrock</span><span class="note">Not verified; check the current pages for the model you use</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The plan built on last year's blog post, the backlog run on demand, the team that assumed AWS never keeps prompts</span><span class="note">Constructed; the facts behind each are quoted at source</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 7 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>What it is</b><span>Fully managed access to 100+ foundation models. Optional layers: Knowledge Bases, Guardrails, customization, batch.</span></div>
+      <div class="cheat-item"><b>Converse</b><span>On bedrock-runtime: modelId, messages of content blocks, inferenceConfig. Support is per model.</span></div>
+      <div class="cheat-item"><b>Token bill</b><span>Nova Micro $0.000035 in, $0.00014 out per 1K (us-east-1, Price List, 3 Oct 2026). 1M notes: $5.32, modelled.</span></div>
+      <div class="cheat-item"><b>Batch</b><span>50% lower than on demand: $2.66. Flex 50% off Standard, Priority 75% premium.</span></div>
+      <div class="cheat-item"><b>One model only</b><span>No bedrock:Converse action. Allow bedrock:InvokeModel on one foundation-model ARN.</span></div>
+      <div class="cheat-item"><b>The prompt</b><span>Providers do not see it; it does not train base models; some models retain it up to 30 days for AWS review.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Tonight wrote one narrow policy and trusted its verdict. Session 8 checks verdicts at scale: the IAM and cost bench runs 36 policy cases, each tied to a sentence in AWS's evaluation docs, shows what breaks when you get one rule backwards, and watches a single wildcard turn the analyst role's 7 allowed actions into 22.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 7 of 8 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b6-redshift-or-athena.html">← Prev: Redshift or Athena</a> &nbsp;·&nbsp; <a href="b8-the-iam-and-cost-bench.html">Next: The IAM and cost bench →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

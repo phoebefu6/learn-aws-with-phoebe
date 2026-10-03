@@ -1,0 +1,9 @@
+queries/day  Athena $/mo | warehouse busy 1 h/day at 8 RPU: $95.81/mo, 4 h/day: $365.81/mo
+         10        34.87
+         50       152.05
+        100       298.54
+        300       884.47
+       1000     2,935.26
+break-even with a warehouse busy 1 h/day at 8 RPU: about 31 queries a day
+break-even with a warehouse busy 4 h/day at 8 RPU: about 123 queries a day
+60-second minimum: a 5-second query on an idle warehouse bills $0.0500 at 8 RPU, not $0.0042

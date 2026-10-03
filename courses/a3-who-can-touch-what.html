@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 3 of 6. Who can touch what on AWS: root, users and roles, identity and bucket policies, the order in which AWS says yes or no, and what one wildcard Allow hands over.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Who can touch what - learn aws with phoebe">
+<meta property="og:description" content="Leader session 3 of 6. One Allow of Action * took an analyst from 7 of 24 data-team actions to 22 of 24. Two explicit Denies still held. That is the whole of IAM in two numbers.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/a3-who-can-touch-what.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Who can touch what - learn aws with phoebe">
+<meta name="twitter:description" content="Leader session 3 of 6. Principals, policies, the six gates of evaluation, and what one wildcard hands over.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 3 · Who can touch what - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Leader session 3 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Leader track · Session 3 of 6</div>
+    <h1>Who can <span class="accent">touch what</span></h1>
+    <p class="sub">Every request to AWS, from an analyst's query to a nightly ingest job, is answered by the same machine: IAM. It starts from no, looks for any explicit Deny, and only then looks for something that says yes. Tonight we read that machine the way a data leader needs to: who is asking, where the policies hang, the order in which AWS decides, and what one careless wildcard hands over to the person holding it.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Data and AI leaders, managers, architects</span>
+      <span class="chip audience">No code, no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Principals, the six gates, one wildcard</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: the access matrix</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 1 put IAM as the ring around the whole platform, and session 2 built the lake inside it. This session opens the ring. One boundary first: the ideas behind access design, roles versus attributes, least privilege as a principle, periodic access reviews, are taught in <a href="https://phoebefu6.github.io/learn-data-access-control-with-phoebe/">learn data access control</a>. What follows is IAM as AWS implements it: the JSON, the order of evaluation, and the numbers from a policy evaluator that follows AWS's own documentation sentence by sentence. Analyst session 2 writes these policies in Python; analyst session 8 runs the evaluator.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> An access matrix for three roles on your lake, analyst, data engineer and ingest job, against five zones, with every cell marked Allow, Deny or nothing, and the two explicit Deny guardrails that no later Allow can undo. Plus one sentence for every access review: one Allow of <code>"Action": "*"</code> took an analyst from 7 of 24 data-team actions to 22 of 24, and only the two explicit Denies held.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers principals, credentials and where policies live</span>
+      <h2>Who asks, and where the rules hang</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A request to AWS has three parts: a principal, the who; an action, such as <code>s3:GetObject</code>; and a resource, such as one object in one bucket. The principal is the account root user, an IAM user, or a role that a person or a job assumes for a while. The rules that answer the request are JSON policies, and they hang in one of two places: on the principal (identity-based) or on the thing being asked for (resource-based, such as a bucket policy).</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 352" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three kinds of principal on the left: the root user with full access, an IAM user holding a long-term access key valid until revoked, and a role whose credentials expire, highlighted. An identity-based policy hangs under the role. All three send a request, drawn as a navy box naming who is asking, the action s3:GetObject and the resource in curated. The request goes to the S3 bucket acme-lake on the right, which carries its own bucket policy, a resource-based policy that names who may do what.">
+        <defs>
+          <filter id="a3aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a3aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a3aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a3aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a3aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a3aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a3aB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a3aW { font: 800 11px Inter, sans-serif; fill: #FFFFFF; }
+          .a3aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a3aH" x="30" y="26">WHO ASKS, WHAT IS ASKED, AND THE TWO PLACES A POLICY CAN HANG</text>
+
+        <g filter="url(#a3aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="48" width="220" height="56" rx="8" transform="rotate(-1.2 150 76)" fill="#FFFFFF"/>
+          <rect x="40" y="118" width="220" height="56" rx="8" transform="rotate(0.9 150 146)" fill="#FFFFFF"/>
+          <rect x="40" y="188" width="220" height="56" rx="8" transform="rotate(-0.7 150 216)" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M150 248 L150 268"/>
+          <rect x="40" y="272" width="220" height="44" rx="6" transform="rotate(1.1 150 294)" fill="#EEF1FA"/>
+          <path d="M262 76 L326 130" marker-end="url(#a3aAr)"/>
+          <path d="M262 146 L326 160" marker-end="url(#a3aAr)"/>
+          <path d="M262 216 L326 190" marker-end="url(#a3aAr)"/>
+          <rect x="330" y="110" width="240" height="100" rx="10" transform="rotate(0.4 450 160)" fill="#183177" stroke="#183177"/>
+          <path d="M574 160 L636 160" marker-end="url(#a3aAr)"/>
+          <rect x="640" y="110" width="210" height="100" rx="10" transform="rotate(-0.6 745 160)" fill="url(#a3aHc)"/>
+          <path d="M750 212 L750 242"/>
+          <rect x="650" y="244" width="200" height="48" rx="6" transform="rotate(-1.4 750 268)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="a3aL" x="56" y="70">Root user</text>
+        <text class="a3aS" x="56" y="90">MFA on, then leave it alone</text>
+        <text class="a3aL" x="56" y="140">IAM user + access key</text>
+        <text class="a3aS" x="56" y="160">valid until someone revokes it</text>
+        <text class="a3aL" x="56" y="210">Role, for a person or a job</text>
+        <text class="a3aB" x="56" y="230">credentials that expire</text>
+        <text class="a3aL" x="56" y="292">identity-based policy</text>
+        <text class="a3aS" x="56" y="308">attached to the user or role</text>
+
+        <text class="a3aW" x="346" y="134">THE REQUEST</text>
+        <text class="a3aW" x="346" y="156">who: the principal</text>
+        <text class="a3aW" x="346" y="176">action: s3:GetObject</text>
+        <text class="a3aW" x="346" y="196">resource: curated/trips</text>
+
+        <text class="a3aL" x="640" y="100">S3 bucket: acme-lake</text>
+        <text class="a3aL" x="666" y="264">bucket policy</text>
+        <text class="a3aS" x="666" y="282">resource-based; names who</text>
+
+        <text class="a3aN" x="30" y="342">A policy hangs on whoever asks, or on the thing being asked for. AWS reads both before it answers.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange principal is the one AWS's best practices ask you to prefer: a role, whose credentials expire on their own</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Root, users, roles: three ways to be "who"<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The <strong>root user</strong> is the identity that opened the account. AWS's evaluation page says it plainly: "By default, all requests are implicitly denied with the exception of the AWS account root user, which has full access." No policy you write narrows it inside its own account, which is why the norm is to protect it with MFA and then not use it for daily work.</p>
+        <p>An <strong>IAM user</strong> is a named identity that can hold a long-term access key: a key ID and secret that work until somebody revokes them. A <strong>role</strong> has no long-term key at all. A person or a job assumes it and receives temporary credentials that expire. AWS's best practices are direct about the preference: "Require your human users to use temporary credentials when accessing AWS", and for workloads, "Require workloads to use temporary credentials with IAM roles to access AWS". Where a long-term key is unavoidable, the same page adds "Where possible, we recommend relying on temporary credentials instead of creating long-term credentials such as access keys."</p>
+        <p>On MFA, the guidance is "for scenarios in which you need an IAM user or root user in your account, require MFA for additional security", and on which kind: "We recommend that you use phishing-resistant MFA such as passkeys and security keys wherever possible."</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>One policy, read line by line<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A policy is a list of statements. Each statement has an <code>Effect</code> (Allow or Deny), an <code>Action</code> (what may be done, as <code>service:Name</code>), a <code>Resource</code> (to which ARN), and optionally a <code>Condition</code> (only when the request looks like this). Here is part of the analyst policy that analyst session 8's evaluator uses, trimmed to two statements:</p>
+        <div class="prompt-box good"><span class="label">★ An identity-based policy, readable</span>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadCurated",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::acme-lake",
+                   "arn:aws:s3:::acme-lake/curated/*"]
+    },
+    {
+      "Sid": "DenyHttp",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::acme-lake",
+                   "arn:aws:s3:::acme-lake/*"],
+      "Condition": {"Bool": {"aws:SecureTransport": "false"}}
+    }
+  ]
+}</div>
+        <p>Read it aloud as a leader would: the analyst may list the lake and read anything under <code>curated/</code>; nobody holding this policy may touch the lake over plain HTTP. Two details matter in reviews. Action names are forgiving: "The prefix and the action name are case insensitive". Resource names are not: "In the Resource element, the IAM user name is case sensitive." And the bucket ARN is not its objects: <code>acme-lake</code> names the bucket, <code>acme-lake/*</code> names what is inside.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Identity-based versus bucket policies<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>An identity-based policy travels with the principal: whatever bucket the analyst asks, the same policy is read. A bucket policy stays with the bucket and must say who it applies to, with a <code>Principal</code> element. Within one account the two add up: AWS describes the result as a union, so either one allowing is enough. One sentence from the enforcement page surprises most reviewers: resource-based policies that grant permissions to an IAM user ARN "are not limited by an implicit deny in an identity-based policy or permissions boundary." A generous bucket policy can therefore open a door that the user's own policy never mentions. When you review a lake's access, read the bucket policy as carefully as the role policies.</p>
+        <p>Cross-account access, role sessions and session policies change these rules and are not taught on these pages; AWS's "Policy evaluation logic" page is the place to go next.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The key that lived in a notebook.</strong> An analyst needs data from the lake for a weekend analysis. The quickest path is an IAM user with an access key, pasted into the first cell of a notebook. The notebook goes into a repository, the repository is made public for a conference talk, and the key is still valid, because a long-term key works until someone revokes it and nobody owned that job. A role assumed through the company's single sign-on would have handed out credentials that expired on their own. The story is constructed, a composite of a pattern AWS's best practices are written against.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers how AWS decides: implicit deny, explicit Deny, the evaluation order</span>
+      <h2>Six gates, and the first one that decides</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">AWS starts every request at no. "By default, all requests are implicitly denied", root excepted. Then it looks in every applicable policy for an explicit Deny, because "An explicit deny overrides an explicit allow." Only after that does it look for something that allows the request, gate by gate. The order below keeps the same scope as analyst session 8: one IAM user in one account.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 378" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A request, drawn as a small circle, walks left to right along a path through six gates. Gate 1, highlighted: is there an explicit Deny in any policy? If yes, Deny, final. Gate 2: an SCP is attached but nothing in it allows the request: Deny. Gate 3: the bucket policy names this user and allows: Allow. Gate 4: no identity-based policy allows: Deny. Gate 5: a permissions boundary is set and does not allow: Deny. Gate 6: nothing stopped the request: Allow. Below, three boxes say how policies combine in one account: identity plus bucket policy is a union, identity plus boundary is an intersection, and an SCP is a ceiling that no account policy can exceed.">
+        <defs>
+          <filter id="a3bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="61" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a3bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a3bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a3bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a3bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a3bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a3bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a3bW { font: 800 11px Inter, sans-serif; fill: #FFFFFF; }
+          .a3bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a3bH" x="30" y="26">SIX GATES IN AWS'S ORDER: THE FIRST GATE THAT DECIDES ENDS THE WALK</text>
+
+        <g filter="url(#a3bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="38" cy="150" r="14" fill="url(#a3bHc)"/>
+          <path d="M54 150 L66 150" marker-end="url(#a3bAr)"/>
+          <rect x="70" y="112" width="110" height="76" rx="8" transform="rotate(-1.5 125 150)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="200" y="112" width="110" height="76" rx="8" transform="rotate(1 255 150)" fill="#FFFFFF"/>
+          <rect x="330" y="112" width="110" height="76" rx="8" transform="rotate(-0.8 385 150)" fill="#FFFFFF"/>
+          <rect x="460" y="112" width="110" height="76" rx="8" transform="rotate(1.3 515 150)" fill="#FFFFFF"/>
+          <rect x="590" y="112" width="110" height="76" rx="8" transform="rotate(-1.1 645 150)" fill="#FFFFFF"/>
+          <rect x="720" y="112" width="110" height="76" rx="8" transform="rotate(0.9 775 150)" fill="#EEF1FA"/>
+          <path d="M182 150 L196 150" marker-end="url(#a3bAr)"/>
+          <path d="M312 150 L326 150" marker-end="url(#a3bAr)"/>
+          <path d="M442 150 L456 150" marker-end="url(#a3bAr)"/>
+          <path d="M572 150 L586 150" marker-end="url(#a3bAr)"/>
+          <path d="M702 150 L716 150" marker-end="url(#a3bAr)"/>
+          <path d="M125 192 L125 222" marker-end="url(#a3bAr)"/>
+          <path d="M255 192 L255 222" marker-end="url(#a3bAr)"/>
+          <path d="M385 192 L385 222" marker-end="url(#a3bAr)"/>
+          <path d="M515 192 L515 222" marker-end="url(#a3bAr)"/>
+          <path d="M645 192 L645 222" marker-end="url(#a3bAr)"/>
+          <path d="M775 192 L775 222" marker-end="url(#a3bAr)"/>
+          <rect x="70" y="226" width="110" height="28" rx="6" fill="#0E1F52" stroke="#0E1F52"/>
+          <rect x="200" y="226" width="110" height="28" rx="6" fill="#183177" stroke="#183177"/>
+          <rect x="330" y="226" width="110" height="28" rx="6" fill="#FFFFFF"/>
+          <rect x="460" y="226" width="110" height="28" rx="6" fill="#183177" stroke="#183177"/>
+          <rect x="590" y="226" width="110" height="28" rx="6" fill="#183177" stroke="#183177"/>
+          <rect x="720" y="226" width="110" height="28" rx="6" fill="#FFFFFF"/>
+          <rect x="30" y="294" width="260" height="52" rx="8" transform="rotate(-0.6 160 320)" fill="#FFFFFF"/>
+          <rect x="310" y="294" width="260" height="52" rx="8" transform="rotate(0.5 440 320)" fill="#FFFFFF"/>
+          <rect x="590" y="294" width="260" height="52" rx="8" transform="rotate(-0.4 720 320)" fill="#EEF1FA"/>
+        </g>
+
+        <text class="a3bS" x="22" y="128">request</text>
+
+        <text class="a3bL" x="80" y="136">1 Any Deny?</text>
+        <text class="a3bB" x="80" y="156">in any policy:</text>
+        <text class="a3bB" x="80" y="174">ends the walk</text>
+        <text class="a3bL" x="210" y="136">2 SCP</text>
+        <text class="a3bS" x="210" y="156">attached, but</text>
+        <text class="a3bS" x="210" y="174">no Allow in it?</text>
+        <text class="a3bL" x="340" y="136">3 Bucket</text>
+        <text class="a3bS" x="340" y="156">policy names</text>
+        <text class="a3bS" x="340" y="174">the user?</text>
+        <text class="a3bL" x="470" y="136">4 Identity</text>
+        <text class="a3bS" x="470" y="156">no Allow in</text>
+        <text class="a3bS" x="470" y="174">its policies?</text>
+        <text class="a3bL" x="600" y="136">5 Boundary</text>
+        <text class="a3bS" x="600" y="156">set, but</text>
+        <text class="a3bS" x="600" y="174">no Allow?</text>
+        <text class="a3bL" x="730" y="136">6 Otherwise</text>
+        <text class="a3bS" x="730" y="156">nothing</text>
+        <text class="a3bS" x="730" y="174">stopped it</text>
+
+        <text class="a3bW" x="125" y="245" text-anchor="middle">Deny, final</text>
+        <text class="a3bW" x="255" y="245" text-anchor="middle">Deny</text>
+        <text class="a3bL" x="385" y="245" text-anchor="middle">Allow</text>
+        <text class="a3bW" x="515" y="245" text-anchor="middle">Deny</text>
+        <text class="a3bW" x="645" y="245" text-anchor="middle">Deny</text>
+        <text class="a3bL" x="775" y="245" text-anchor="middle">Allow</text>
+
+        <text class="a3bH" x="30" y="284">HOW TWO POLICIES COMBINE, IN ONE ACCOUNT</text>
+        <text class="a3bL" x="46" y="316">Bucket policy: union</text>
+        <text class="a3bS" x="46" y="334">either one allowing is enough</text>
+        <text class="a3bL" x="326" y="316">Boundary: intersection</text>
+        <text class="a3bS" x="326" y="334">identity and boundary must both allow</text>
+        <text class="a3bL" x="606" y="316">SCP: the ceiling</text>
+        <text class="a3bS" x="606" y="334">no account policy can exceed it</text>
+
+        <text class="a3bN" x="30" y="368">Deny is looked for first, everywhere. Only then does AWS look for a yes, one gate at a time.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange gate is checked before any Allow is read, and nothing later can overturn it</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Implicit deny and explicit Deny are not the same no<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>An <strong>implicit deny</strong> is silence: no policy said yes. It is the starting state of every request, and any Allow that applies can lift it. An <strong>explicit Deny</strong> is a statement with <code>"Effect": "Deny"</code> that matches the request. It is checked first, in every applicable policy at once, and the enforcement page is unambiguous: "If the enforcement code finds even one explicit deny that applies", the final decision is Deny. No Allow anywhere overturns it.</p>
+        <p>That difference is the leader's lever. Allows are how you grant work; explicit Denies are how you set a floor that survives the next person's generous Allow. A Deny on deleting the lake bucket stays true when someone later attaches a wide policy to the same role, which is exactly what Part 3 measures.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Walking the six gates<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Gate 1: any explicit Deny in an SCP, the bucket policy, an identity policy or a boundary ends the walk. Gate 2: if a service control policy applies and nothing in it allows the request, Deny. Gate 3: if the bucket policy names this user's ARN and allows, Allow, for the reason in Part 1. Gate 4: if no identity-based policy allows, implicit Deny. Gate 5: if a permissions boundary is set and does not allow, Deny. Gate 6: anything still walking is allowed.</p>
+        <p>AWS's full order has two more stops this scope leaves out: resource control policies, and session policies for role sessions. They change verdicts, so the evaluator in analyst session 8 refuses to guess about them rather than quietly skipping them. The full page is "How AWS enforcement code logic evaluates requests to allow or deny access".</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Union, intersection, ceiling<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Three words cover how policies combine in one account. Identity-based plus resource-based is a <strong>union</strong>: either may grant. Identity-based plus a permissions boundary is an <strong>intersection</strong>: the boundary never grants anything on its own, it only limits what the identity policy can reach, which is why it suits delegating role creation to a team without handing them the keys to everything. Identity-based plus an SCP must both allow: the SCP is the <strong>ceiling</strong> set by the organisation, and no policy inside the account can reach above it.</p>
+        <p>Conditions follow their own small rules worth knowing before a review. If a key named in a condition is missing from the request, "the values do not match and the condition is false", and a negated operator turns true. Several operators in one block are ANDed; several values for one key are ORed. The Organizations side of SCPs, and account design generally, is not taught on these pages.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The Allow that did nothing.</strong> A data engineer cannot delete an old staging bucket. They add <code>s3:*</code> to their own role, then <code>"Action": "*"</code>, and the error does not change. Two hours later someone finds the cause: an explicit Deny on <code>s3:DeleteBucket</code> in an SCP set by the platform team a year earlier. Every added Allow was read at a gate the request never reached. The guardrail worked exactly as designed; what was missing was a note saying it existed and who owned it. Constructed, from a common pattern.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers what one wildcard hands over, measured</span>
+      <h2>One wildcard, counted</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Analyst session 8 runs a policy evaluator, written in JavaScript and ported to Python, that follows the IAM documentation sentence by sentence; on all 192 verdicts it computes, the two agree. It holds an analyst role with two policies: read the curated zone, run Athena, write query results; and guardrails that deny plain HTTP on the lake and deny deleting the bucket or changing its policy. Then it adds one statement, an Allow of <code>"Action": "*"</code> on <code>"Resource": "*"</code>, and counts.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 328" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Twenty-four tiles, one per data-team action the analyst might request. Seven navy tiles were allowed by the analyst's own policies: read curated, list the lake, write query results, run an Athena query, read Athena results, Glue GetTable and Glue partitions. Fifteen red tiles become allowed only after a single Allow of Action star on Resource star is added, including reading raw, writing to curated, deleting objects, IAM user and access key creation, Lambda code changes, EC2 instances, KMS decrypt and reading another bucket. Two orange tiles, DeleteBucket and PutBucketPolicy, stay denied because explicit Deny guardrails hold. Totals: 7 of 24 before, 22 of 24 after, 2 of 2 Denies hold.">
+        <defs>
+          <filter id="a3cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a3cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a3cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a3cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a3cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a3cB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a3cW { font: 800 11px Inter, sans-serif; fill: #FFFFFF; }
+          .a3cR { font: 800 11px Inter, sans-serif; fill: #991B1B; }
+          .a3cV { font: 800 18px Inter, sans-serif; fill: #0E1F52; }
+          .a3cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a3cH" x="24" y="30">THE ANALYST ROLE, 24 DATA-TEAM ACTIONS, AFTER ONE WILDCARD ALLOW</text>
+
+        <g filter="url(#a3cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="24" y="46" width="134" height="38" rx="6" transform="rotate(-1 91 65)" fill="#183177" stroke="#183177"/>
+          <rect x="165" y="46" width="134" height="38" rx="6" transform="rotate(0.8 232 65)" fill="#183177" stroke="#183177"/>
+          <rect x="306" y="46" width="134" height="38" rx="6" transform="rotate(-0.6 373 65)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="447" y="46" width="134" height="38" rx="6" transform="rotate(1.2 514 65)" fill="#FEF2F2" stroke="#991B1B"/>
+          <rect x="588" y="46" width="134" height="38" rx="6" transform="rotate(-0.9 655 65)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="729" y="46" width="134" height="38" rx="6" transform="rotate(0.7 796 65)" fill="#183177" stroke="#183177"/>
+
+          <rect x="24" y="94" width="134" height="38" rx="6" transform="rotate(1.4 91 113)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="165" y="94" width="134" height="38" rx="6" transform="rotate(-1.2 232 113)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="306" y="94" width="134" height="38" rx="6" transform="rotate(0.9 373 113)" fill="#183177" stroke="#183177"/>
+          <rect x="447" y="94" width="134" height="38" rx="6" transform="rotate(-0.7 514 113)" fill="#183177" stroke="#183177"/>
+          <rect x="588" y="94" width="134" height="38" rx="6" transform="rotate(1 655 113)" fill="#183177" stroke="#183177"/>
+          <rect x="729" y="94" width="134" height="38" rx="6" transform="rotate(-1.3 796 113)" fill="#183177" stroke="#183177"/>
+
+          <rect x="24" y="142" width="134" height="38" rx="6" transform="rotate(-0.8 91 161)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="165" y="142" width="134" height="38" rx="6" transform="rotate(1.1 232 161)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="306" y="142" width="134" height="38" rx="6" transform="rotate(-1.2 373 161)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="447" y="142" width="134" height="38" rx="6" transform="rotate(0.6 514 161)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="588" y="142" width="134" height="38" rx="6" transform="rotate(-0.5 655 161)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="729" y="142" width="134" height="38" rx="6" transform="rotate(1.3 796 161)" fill="#FEF2F2" stroke="#FCA5A5"/>
+
+          <rect x="24" y="190" width="134" height="38" rx="6" transform="rotate(0.9 91 209)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="165" y="190" width="134" height="38" rx="6" transform="rotate(-1 232 209)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="306" y="190" width="134" height="38" rx="6" transform="rotate(0.7 373 209)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="447" y="190" width="134" height="38" rx="6" transform="rotate(-1.4 514 209)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="588" y="190" width="134" height="38" rx="6" transform="rotate(1.2 655 209)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="729" y="190" width="134" height="38" rx="6" transform="rotate(-0.6 796 209)" fill="#FEF2F2" stroke="#FCA5A5"/>
+
+          <rect x="24" y="252" width="14" height="14" rx="2" fill="#183177" stroke="#183177"/>
+          <rect x="310" y="252" width="14" height="14" rx="2" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="600" y="252" width="14" height="14" rx="2" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a3cW" x="34" y="70">S3 read curated</text>
+        <text class="a3cW" x="175" y="70">S3 list lake</text>
+        <text class="a3cR" x="316" y="70">S3 read raw</text>
+        <text class="a3cR" x="457" y="70">S3 write curated</text>
+        <text class="a3cR" x="598" y="70">S3 delete object</text>
+        <text class="a3cW" x="739" y="70">S3 write results</text>
+
+        <text class="a3cB" x="34" y="118">S3 DeleteBucket</text>
+        <text class="a3cB" x="175" y="118">PutBucketPolicy</text>
+        <text class="a3cW" x="316" y="118">Athena run query</text>
+        <text class="a3cW" x="457" y="118">Athena results</text>
+        <text class="a3cW" x="598" y="118">Glue GetTable</text>
+        <text class="a3cW" x="739" y="118">Glue partitions</text>
+
+        <text class="a3cR" x="34" y="166">Glue DeleteTable</text>
+        <text class="a3cR" x="175" y="166">Glue new crawler</text>
+        <text class="a3cR" x="316" y="166">Lambda invoke</text>
+        <text class="a3cR" x="457" y="166">Lambda new code</text>
+        <text class="a3cR" x="598" y="166">IAM CreateUser</text>
+        <text class="a3cR" x="739" y="166">IAM AttachPolicy</text>
+
+        <text class="a3cR" x="34" y="214">IAM access key</text>
+        <text class="a3cR" x="175" y="214">Redshift create</text>
+        <text class="a3cR" x="316" y="214">Bedrock invoke</text>
+        <text class="a3cR" x="457" y="214">EC2 RunInstances</text>
+        <text class="a3cR" x="598" y="214">KMS Decrypt</text>
+        <text class="a3cR" x="739" y="214">Someone's bucket</text>
+
+        <text class="a3cV" x="46" y="266">7 of 24</text>
+        <text class="a3cS" x="46" y="286">allowed by the analyst's own policies</text>
+        <text class="a3cV" x="332" y="266">22 of 24</text>
+        <text class="a3cS" x="332" y="286">after one Allow of * on *</text>
+        <text class="a3cV" x="622" y="266">2 of 2</text>
+        <text class="a3cS" x="622" y="286">explicit Denies still hold</text>
+
+        <text class="a3cN" x="24" y="314">Across all 36 test cases: allowed went from 16 to 28; 12 implicit denies turned into allows.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange tiles are the only two actions the wildcard could not reach, because an explicit Deny was there first</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Read the two numbers<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Before the wildcard, the analyst can do <strong>7 of 24</strong> data-team actions: read and list curated data, write query results, run Athena and read its results, read the table and its partitions in the Glue catalog. After one added statement, <strong>22 of 24</strong>. The fifteen new ones include reading the raw zone, overwriting curated files, deleting objects, creating IAM users and access keys, changing Lambda code, starting EC2 instances and decrypting with a KMS key. The demo request in analyst session 8, <code>s3:PutObject</code> into <code>curated/</code>, goes from implicit Deny to Allow.</p>
+        <p>Only <code>s3:DeleteBucket</code> and <code>s3:PutBucketPolicy</code> stay denied, because the guardrail policy denies them explicitly and gate 1 runs before any Allow is read. Across the full table of 36 test cases, each tied to a documentation sentence, allowed requests go from 16 to <strong>28 of 36</strong>, and only 24 of 36 still match the verdicts the documentation predicts: 12 implicit denies became allows. These are measured counts from the evaluator, and the full bench, with its two "break the logic" buttons, is in <a href="b8-the-iam-and-cost-bench.html">analyst session 8</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Guardrail Denies are the floor<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The lesson is not "never write a wildcard". People will, under deadline, and some service integrations ask for wide grants. The lesson is to decide in advance which few actions must never happen to the lake, and to deny them explicitly, in a place the people writing Allows do not own: a separate guardrail policy, a boundary, or an SCP. Then the worst mistake a generous Allow can make is bounded by a floor you chose calmly.</p>
+        <p>One variant deserves a separate warning. <code>NotAction</code> with Allow reads like a restriction and behaves like a grant. AWS's example "allows users to access every action in every AWS service except for IAM", and the same page cautions that it "could result in granting users more permissions than you intended."</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Getting back to least privilege with Access Analyzer<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>AWS's first best practice is "grant only the permissions required to perform a task". The hard part is knowing which permissions a role actually needs. The best-practices page points at a tool for that: "Use IAM Access Analyzer to generate least-privilege policies based on access activity". In AWS's words, "IAM Access Analyzer analyzes the services and actions that your IAM roles use, and then generates a fine-grained policy that you can use." For a leader the practical move is a habit: when a role carries a wildcard, ask for the generated policy from real activity and compare the two. The process questions, who reviews, how often, and against which design, belong to <a href="https://phoebefu6.github.io/learn-data-access-control-with-phoebe/">learn data access control</a>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Admin for the demo.</strong> A Friday demo fails on an access error. The fastest fix is one statement, <code>"Action": "*"</code>, on the demo role. The demo works, the statement stays, and six months later the role is still the one the reporting job uses, with permission to create IAM users. Nothing was breached; the team simply carried twenty-two doors open where seven were needed. The two that stayed shut were the two somebody had denied explicitly. Constructed; the 7 and 22 come from the evaluator.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>The access matrix, on paper</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No console and no account. Three roles down the side, five zones across the top, and in every cell one of three marks: Allow, Deny, or nothing. "Nothing" is not a gap in the sheet; it is an implicit deny, and most cells should say it. Then pick the two actions that get an explicit Deny for everyone. The worked examples below are constructed; your zones and roles will differ.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 252" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A hand-drawn worksheet grid. Columns: role, raw, curated, results, catalog, IAM. Rows: analyst, data engineer, ingest job. The analyst row is filled as a worked example: raw nothing, curated read, results write, catalog read, IAM nothing. The other two rows are empty for the learner. An orange tab below names the two explicit Deny guardrails: DeleteBucket and PutBucketPolicy.">
+        <defs>
+          <filter id="a3dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a3dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a3dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a3dH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a3dL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a3dS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a3dB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a3dN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#a3dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="24" width="820" height="164" rx="8" transform="rotate(-0.3 440 106)" fill="#FFFFFF"/>
+          <path d="M30 56 L850 56"/>
+          <path d="M190 24 L190 188 M322 24 L322 188 M454 24 L454 188 M586 24 L586 188 M718 24 L718 188" stroke="#C5CCD8"/>
+          <path d="M40 100 L840 100 M40 144 L840 144" stroke="#E3E7EE"/>
+          <rect x="36" y="61" width="808" height="34" rx="4" fill="#EEF1FA" stroke="#EEF1FA"/>
+          <rect x="30" y="204" width="330" height="30" rx="6" transform="rotate(0.6 195 219)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a3dH" x="44" y="45">ROLE</text>
+        <text class="a3dH" x="202" y="45">RAW</text>
+        <text class="a3dH" x="334" y="45">CURATED</text>
+        <text class="a3dH" x="466" y="45">RESULTS</text>
+        <text class="a3dH" x="598" y="45">CATALOG</text>
+        <text class="a3dH" x="730" y="45">IAM</text>
+
+        <text class="a3dL" x="44" y="83">Analyst</text>
+        <text class="a3dS" x="202" y="83">nothing</text>
+        <text class="a3dS" x="334" y="83">Allow: read, list</text>
+        <text class="a3dS" x="466" y="83">Allow: write</text>
+        <text class="a3dS" x="598" y="83">Allow: read</text>
+        <text class="a3dS" x="730" y="83">nothing</text>
+        <text class="a3dL" x="44" y="127">Data engineer</text>
+        <text class="a3dL" x="44" y="171">Ingest job</text>
+
+        <text class="a3dB" x="44" y="224">Deny for all: DeleteBucket, PutBucketPolicy</text>
+        <text class="a3dN" x="380" y="224">Allow, Deny, or nothing. Nothing means implicit deny.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the analyst row is constructed; the orange tab is the floor every row sits on</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Draw the grid.</strong> Rows: analyst, data engineer, ingest job. Columns: raw (data as it arrived), curated (cleaned Parquet), results (where query output lands), catalog (the Glue tables), and IAM itself. If your lake has a different zone, such as a sandbox, add a column; keep IAM as the last one, because who can change permissions is a permission too.</p>
+      </div>
+      <div class="step">
+        <p><strong>Fill the analyst row.</strong> Start every cell at "nothing" and only write Allow where the job cannot be done without it. Write the verb, not the service name.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the analyst row (constructed)</span>Raw:      nothing        (reads curated only; raw may hold unmasked fields)
+Curated:  Allow read, list
+Results:  Allow write    (Athena needs somewhere to put query output)
+Catalog:  Allow read     (table, database, partitions)
+IAM:      nothing
+Credentials: a role through single sign-on, never an access key</div>
+      </div>
+      <div class="step">
+        <p><strong>Fill the ingest job row.</strong> A job is a principal too, and the best practice for workloads is a role with temporary credentials. Ask what the job writes, and what it never needs to read.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the ingest job row (constructed)</span>Raw:      Allow write    (lands files as they arrive)
+Curated:  Allow write    (writes the cleaned Parquet)
+Results:  nothing
+Catalog:  Allow add partitions
+IAM:      nothing
+Credentials: a role assumed by the job; no key stored in its code</div>
+      </div>
+      <div class="step">
+        <p><strong>Fill the data engineer row yourself.</strong> This is the row that drifts toward "everything", because engineers fix things. Write down which cells truly need Allow day to day, and which are break-glass work that should go through a separate, logged role. Expect at least one argument; it is the useful part of the exercise.</p>
+      </div>
+      <div class="step">
+        <p><strong>Choose the two explicit Denies.</strong> Pick the two actions whose single occurrence would hurt most, and deny them for every role in the matrix, in a policy none of the three roles' owners can edit. Gate 1 then protects them whatever Allow is added later.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the floor (same as the analyst session 8 bench)</span>Deny  s3:DeleteBucket     on the lake    (nobody deletes the lake)
+Deny  s3:PutBucketPolicy  on the lake    (nobody rewrites who can reach it)
+Where: a guardrail policy, a boundary or an SCP owned by the platform lead
+Bonus: Deny s3:* on the lake when aws:SecureTransport is "false"</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The matrix that grants by default</span>analyst:        s3:* on the lake "to save tickets"
+data engineer:  "Action": "*" until the migration is done
+ingest job:     an IAM user with an access key in the pipeline config
+guardrails:     none, everyone is careful</div>
+
+    <div class="callout tip">
+      <p><strong>Count the "nothing" cells.</strong> In a healthy matrix most cells are empty. If a reviewer sees more Allows than blanks, the question to ask is not "is anyone misusing this?" but "which of these would we write today if we started from no?". AWS already starts from no; the matrix should too.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 4</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Find the long-term keys.</strong> Ask your platform owner how many IAM users with active access keys exist, and which of them are used by jobs rather than people. Each one is a candidate to replace with a role.</li>
+      <li><strong>Find one wildcard.</strong> Ask for any policy in production with <code>"Action": "*"</code> or <code>s3:*</code>, and who added it. Ask whether IAM Access Analyzer's generated policy for that role has been compared against it.</li>
+      <li><strong>Find the floor.</strong> Ask which explicit Deny guardrails exist on your lake, where they live (guardrail policy, boundary or SCP), and who can edit them. If the answer is "none", bring your two from the build-along.</li>
+      <li><strong>Finish the matrix.</strong> Complete the data engineer row with someone who does the job, then bring the sheet: session 6 places these roles onto the one-page platform.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 3 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · A role has an Allow of <code>"Action": "*"</code> on <code>"Resource": "*"</code>, and a guardrail policy with an explicit Deny on <code>s3:DeleteBucket</code>. Someone using the role tries to delete the lake bucket. What happens?</p>
+      <button class="qopt" type="button">A · Allowed, because the wildcard is broader than the Deny</button>
+      <button class="qopt" type="button">B · Denied: explicit Denies are checked first, in every applicable policy, and an explicit Deny overrides any Allow</button>
+      <button class="qopt" type="button">C · Allowed, because the most recently attached policy wins</button>
+      <button class="qopt" type="button">D · It depends on which policy is listed first in the console</button>
+      <p class="qwhy">"An explicit deny overrides an explicit allow." In the analyst session 8 evaluator, the wildcard lifted the analyst from 7 to 22 of 24 actions, and DeleteBucket and PutBucketPolicy still held for exactly this reason.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · A new IAM user has no policies attached at all and asks to read an object in the lake. What does "implicitly denied" mean for that request?</p>
+      <button class="qopt" type="button">A · The request is allowed until somebody writes a Deny</button>
+      <button class="qopt" type="button">B · The request is denied for good; no later policy can change it</button>
+      <button class="qopt" type="button">C · The request is allowed because the user is in the same account as the bucket</button>
+      <button class="qopt" type="button">D · It is denied because nothing allows it; adding an applicable Allow, in an identity or bucket policy, would change the answer</button>
+      <p class="qwhy">"By default, all requests are implicitly denied", root excepted. Implicit deny is silence, and an Allow can lift it. An explicit Deny is a statement, and nothing lifts that.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · Why do AWS's best practices prefer a role for a nightly ingest job over an IAM user with an access key?</p>
+      <button class="qopt" type="button">A · A role hands out temporary credentials that expire on their own, while a long-term access key keeps working until someone revokes it, wherever it has been copied</button>
+      <button class="qopt" type="button">B · Roles are cheaper than IAM users</button>
+      <button class="qopt" type="button">C · Roles cannot be denied by any policy</button>
+      <button class="qopt" type="button">D · Access keys cannot be used by scripts</button>
+      <p class="qwhy">"Require workloads to use temporary credentials with IAM roles to access AWS", and "Where possible, we recommend relying on temporary credentials instead of creating long-term credentials such as access keys." A leaked key is only as dangerous as it is long-lived.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Implicit deny, explicit Deny wins, the evaluation order</span><span class="note">AWS IAM User Guide, "Policy evaluation logic" and "How AWS enforcement code logic evaluates requests to allow or deny access", read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Union with a bucket policy, intersection with a boundary, SCP as ceiling</span><span class="note">AWS IAM User Guide, "Policy evaluation logic", read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Policy anatomy: Action and Resource matching, NotAction, conditions</span><span class="note">AWS IAM User Guide, "Policy elements: Action / Resource / NotAction"; "Condition operators"; "Conditions with multiple context keys or values"</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Least privilege, temporary credentials over access keys, MFA and passkeys, Access Analyzer</span><span class="note">AWS IAM User Guide, "Security best practices in IAM", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">7 of 24 to 22 of 24; 2 Denies hold; 16 to 28 of 36</span><span class="note">Measured by the analyst session 8 evaluator; JavaScript and Python agree on 192 verdicts</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Scope: one IAM user in one account</span><span class="note">RCPs, session policies, role sessions and cross-account access are named, not taught; see AWS's evaluation pages</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The notebook key, the Allow that did nothing, admin for the demo; the matrix rows</span><span class="note">Constructed composites of common patterns, not specific incidents</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 3 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Start at no</b><span>Every request is implicitly denied until something allows it. Root is the one exception.</span></div>
+      <div class="cheat-item"><b>Deny is read first</b><span>One explicit Deny in any applicable policy ends the walk. No Allow overturns it.</span></div>
+      <div class="cheat-item"><b>Two places for a policy</b><span>On whoever asks (identity-based) or on the thing asked for (bucket policy). Same account: union.</span></div>
+      <div class="cheat-item"><b>Boundary and SCP</b><span>A boundary intersects, an SCP is a ceiling. Neither grants on its own.</span></div>
+      <div class="cheat-item"><b>Roles over keys</b><span>Temporary credentials that expire, not access keys that live until revoked. MFA with passkeys.</span></div>
+      <div class="cheat-item"><b>One wildcard</b><span>7 of 24 actions became 22 of 24. Only the 2 explicit Denies held. Set the floor first.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>The engines row of your map. Some work runs for milliseconds when a file lands, some runs all day, and some is a SQL question priced by what it reads. Session 4 sets Lambda's limits against an always-on container, Redshift Serverless's per-second billing with its 60-second minimum against Athena's per-byte meter, and classifies five real jobs by the meter they run on.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 3 of 6 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="a2-s3-is-the-lake.html">← Prev: S3 is the lake</a> &nbsp;·&nbsp; <a href="a4-compute-or-serverless.html">Next: Compute or serverless →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

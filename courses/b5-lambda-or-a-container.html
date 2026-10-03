@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 5 of 8. An S3 event handler that turns one day of taxi CSV into Parquet on a mocked bucket, the Lambda quotas that box it in, and the bill: per-millisecond Lambda against a container that is always on.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Lambda or a container - learn aws with phoebe">
+<meta property="og:description" content="Analyst session 5 of 8. 262,544 bytes of CSV in, 81,729 bytes of Parquet out; a 901 s timeout that moto accepted and real Lambda would not; $0.01, $14.41 or $36.04 a month.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/b5-lambda-or-a-container.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lambda or a container - learn aws with phoebe">
+<meta name="twitter:description" content="Analyst session 5 of 8. An event-driven handler, the quotas a mock does not check, and where Lambda's bill crosses an always-on container.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 5 · Lambda or a container - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Analyst session 5 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Analyst track · Session 5 of 8</div>
+    <h1>Lambda or a <span class="accent">container</span></h1>
+    <p class="sub">Session 4 priced reading the lake. Something still has to write it. Tonight a file lands in <code>raw/</code>, an S3 event wakes a small Python handler, and one day of taxi trips comes out the other side as Parquet in <code>curated/</code>. Then we ask the two questions every team asks too late: will this job fit inside Lambda's box, and is a function that bills by the millisecond really cheaper than a container that simply stays on?</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Applied</span>
+      <span class="chip audience">Data analysts and engineers</span>
+      <span class="chip audience">Python, runs locally, no AWS account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · The handler, the quotas, the bill</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: CSV to Parquet on an event</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Sessions 1 to 4 wrote files by hand and then priced reading them. In a real lake nobody writes the curated copy by hand: a file arrives, and code reacts. Tonight that code is a Lambda-style handler. It runs for real on your laptop against moto's mocked S3, so the downloads, the DuckDB conversion and the upload are genuine. The Lambda service itself is only mocked: moto stores the function's configuration and checks less than AWS does, which turns out to be one of tonight's lessons. The bill at the end uses real prices from the AWS Price List and modelled workloads, labelled as such.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = run the code yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A working event handler you can read line by line (262,544 bytes of CSV in, 81,729 bytes of Parquet out), the Lambda quotas you check before you deploy anything, the habit of not trusting a mock for any of them, and a two-line cost model that tells you where a function stops being cheaper than a container: about 108,000 runs a month for a 20-second, 1 GB job.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the event-driven handler</span>
+      <h2>A file lands, a function wakes, a file leaves</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">The handler does four things and nothing else. It reads the bucket and key out of the S3 event, downloads that object to <code>/tmp</code>, asks DuckDB to rewrite the CSV as Parquet, and uploads the result under <code>curated/</code> with the same date in its name. On the 15 January slice of the sample, the build-along measured 262,544 bytes in and 81,729 bytes out: the curated copy is 31.1% of the raw one (derived from those two numbers). Everything interesting about the design is in what it refuses to do.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 322" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Event flow. A CSV for 15 January, 262,544 bytes, lands under the raw prefix of an S3 bucket. The PUT creates an event carrying the bucket and key, filtered to the raw prefix. The highlighted handler downloads the file to /tmp, converts it with DuckDB COPY to Parquet, and uploads it under the curated prefix, where it is 81,729 bytes. Peak /tmp use is 344,273 bytes. A dashed red loop shows the wrong way: if the trigger listens to the whole bucket, the curated upload is itself a new PUT and the handler fires on its own output.">
+        <defs>
+          <filter id="b5aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="51" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b5aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b5aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b5aH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b5aL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b5aS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b5aB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b5aV { font: 800 16px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #0E1F52; }
+          .b5aN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b5aH" x="30" y="26">ONE DAY OF TRIPS, FROM LANDING TO CURATED, ON AN S3 EVENT</text>
+
+        <g filter="url(#b5aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="50" width="150" height="100" rx="8" transform="rotate(-1.2 105 100)" fill="#FFFFFF"/>
+          <rect x="30" y="132" width="150" height="14" rx="3" fill="url(#b5aHc)"/>
+          <rect x="210" y="60" width="130" height="80" rx="8" transform="rotate(0.9 275 100)" fill="#EEF1FA"/>
+          <rect x="370" y="44" width="280" height="122" rx="8" transform="rotate(0.6 510 105)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="680" y="50" width="170" height="100" rx="8" transform="rotate(-0.8 765 100)" fill="#FFFFFF"/>
+          <rect x="680" y="132" width="170" height="14" rx="3" fill="url(#b5aHc)"/>
+          <path d="M186 100 L204 100" marker-end="url(#b5aAr)"/>
+          <path d="M346 100 L364 100" marker-end="url(#b5aAr)"/>
+          <path d="M656 100 L674 100" marker-end="url(#b5aAr)"/>
+          <path d="M765 156 C765 206, 275 206, 275 148" stroke="#991B1B" stroke-dasharray="6 5" marker-end="url(#b5aAr)"/>
+          <rect x="30" y="222" width="820" height="58" rx="7" transform="rotate(-0.3 440 251)" fill="#FEF2F2" stroke="#991B1B"/>
+        </g>
+
+        <text class="b5aL" x="42" y="74">S3 raw/ (landing)</text>
+        <text class="b5aS" x="42" y="96">2024-01-15.csv</text>
+        <text class="b5aV" x="42" y="122">262,544 B</text>
+
+        <text class="b5aL" x="222" y="86">PUT event</text>
+        <text class="b5aS" x="222" y="106">bucket + key</text>
+        <text class="b5aS" x="222" y="124">prefix raw/ only</text>
+
+        <text class="b5aL" x="384" y="68">handler(event), on Lambda</text>
+        <text class="b5aB" x="384" y="92">1 download to /tmp/in.csv</text>
+        <text class="b5aB" x="384" y="112">2 DuckDB COPY ... TO /tmp/out.parquet</text>
+        <text class="b5aB" x="384" y="132">3 upload to curated/, same date</text>
+        <text class="b5aB" x="384" y="152">/tmp peak: 344,273 B</text>
+
+        <text class="b5aL" x="692" y="74">S3 curated/</text>
+        <text class="b5aS" x="692" y="96">2024-01-15.parquet</text>
+        <text class="b5aV" x="692" y="122">81,729 B</text>
+
+        <text class="b5aL" x="46" y="246">Wrong way: the trigger listens to the whole bucket (the dashed line)</text>
+        <text class="b5aS" x="46" y="266">The curated/ upload is a new PUT too, so the handler fires on its own output. Filter the trigger on raw/ and .csv.</text>
+
+        <text class="b5aN" x="30" y="306">Measured on moto S3: 262,544 B of CSV became 81,729 B of Parquet. /tmp peak is the two files added together.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - raw/ and curated/ are separate prefixes so the function can never hear its own writes</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Event in, object out: the handler line by line<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>The event is a pointer, not the data.</strong> <code>event["Records"][0]["s3"]</code> holds a bucket name and a key. The 262,544-byte file never travels inside the event; the handler fetches it. <strong>Scratch space is <code>/tmp</code>.</strong> The file is downloaded to <code>/tmp/in.csv</code> because that is the writable disk a Lambda function gets. <strong>DuckDB does the conversion in one statement.</strong> <code>COPY (SELECT * FROM read_csv_auto(...)) TO '/tmp/out.parquet' (FORMAT parquet)</code> infers the columns and writes Parquet; session 1 showed why the curated copy is the one worth querying. <strong>The output key is computed from the input key.</strong> <code>raw/</code> becomes <code>curated/</code> and <code>.csv</code> becomes <code>.parquet</code>, so <code>raw/nyc_taxi/2024-01-15.csv</code> always produces <code>curated/nyc_taxi/2024-01-15.parquet</code>.</p>
+        <p>The function returns a small dictionary with both keys and both sizes. That is not decoration: it is what you log, and what you check when someone asks whether yesterday's file made it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Idempotency: the same event should make the same file<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Design every handler as if the same event might arrive twice. These pages did not verify S3's event delivery guarantees, which is exactly why the professional norm is to make a second run harmless rather than to hope it never happens. This handler gets that almost for free: the output key is a pure function of the input key, so a second run overwrites <code>curated/nyc_taxi/2024-01-15.parquet</code> with the same content instead of creating a second copy. Compare a handler that names its output with a timestamp or a random id: run it twice and the curated zone holds the day twice, and every Athena query from session 4 double-counts. Homework 1 makes you prove the property on moto.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span><code>/tmp</code> is scratch, not storage<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Lambda's <code>/tmp</code> can be set from 512 MB to 10,240 MB ("Lambda quotas"). Tonight's peak is both files at once, 344,273 bytes, a sliver of the smallest setting. Two habits keep it boring. Write to fixed names you overwrite, as this handler does, so a leftover file from an earlier run cannot be mistaken for this one; how long <code>/tmp</code> contents survive between invocations is not something these pages verified, so never rely on them being either there or gone. And anything that must outlive the invocation goes to S3, never to <code>/tmp</code>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The function that kept feeding itself.</strong> A team wires a converter to "object created" on the whole bucket and writes its output back to the same bucket. Every output is an object created, so every output wakes the function again, and the invocation count climbs with nobody uploading anything. The fix is structural, not clever: inputs in <code>raw/</code>, outputs in <code>curated/</code>, and a trigger filtered to prefix <code>raw/</code> and suffix <code>.csv</code>, so the function cannot hear its own writes. The scenario is constructed; the separation of zones is the one session 1 drew.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the Lambda quotas, and what a mock does not check</span>
+      <h2>The box the function has to fit in</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Lambda is cheap and effortless right up to the edge of its quotas, and then it is not an option at all. The edges are published on one page of the developer guide, "Lambda quotas", and the build-along found the most important lesson about them by accident: moto accepted a 901-second timeout that real Lambda caps at 900. The mock ran the code; it did not check the box. You do.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 396" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three quota gauges with tonight's job plotted on them. Timeout, maximum 900 seconds: the modelled 20 second job sits inside; a 20 minute job, 1,200 seconds, is outside, highlighted; moto accepted 901 seconds, which is also outside. Memory, 128 to 10,240 megabytes: the job uses 1,024 megabytes, below the 1,769 megabyte point where a function gets one vCPU. Temporary storage, 512 to 10,240 megabytes: the job's peak of 344,273 bytes fits easily. Below, three cards: payload limits of 6 MB synchronous, 1 MB asynchronous and 200 MB streamed, with the event carrying only a bucket and key; deployment package limits of 50 MB zipped, 250 MB unzipped, or a 10 GB container image; and concurrency of 1,000 by default, lower on new accounts.">
+        <defs>
+          <filter id="b5bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="59" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b5bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b5bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b5bH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b5bL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b5bS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b5bB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b5bA { font: 700 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #183177; }
+          .b5bN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b5bH" x="30" y="26">TONIGHT'S JOB AGAINST LAMBDA'S QUOTAS</text>
+        <text class="b5bA" x="220" y="44">tint = what Lambda allows · navy dot = this job · orange = outside the box</text>
+
+        <g filter="url(#b5bSk)" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="220" y="72" width="318" height="14" rx="3" transform="rotate(-0.3 379 79)" fill="#EEF1FA"/>
+          <rect x="538" y="72" width="142" height="14" rx="3" fill="#FFFFFF"/>
+          <path d="M538 66 L538 92" stroke-width="2.4"/>
+          <circle cx="227" cy="79" r="5" fill="#183177" stroke="#183177"/>
+          <circle cx="545" cy="79" r="5" fill="#FF9900" stroke="#5C3300"/>
+          <circle cx="645" cy="79" r="5" fill="#FF9900" stroke="#5C3300"/>
+
+          <rect x="220" y="142" width="6" height="14" fill="#FFFFFF"/>
+          <rect x="226" y="142" width="454" height="14" rx="3" transform="rotate(0.3 453 149)" fill="#EEF1FA"/>
+          <path d="M300 140 L300 160" stroke-width="2.4"/>
+          <circle cx="266" cy="149" r="5" fill="#183177" stroke="#183177"/>
+
+          <rect x="220" y="206" width="23" height="14" fill="#FFFFFF"/>
+          <rect x="243" y="206" width="437" height="14" rx="3" transform="rotate(-0.3 461 213)" fill="#EEF1FA"/>
+          <circle cx="222" cy="213" r="4" fill="#183177" stroke="#183177"/>
+
+          <rect x="30" y="254" width="265" height="100" rx="7" transform="rotate(-0.6 162 304)" fill="#FFFFFF"/>
+          <rect x="307" y="254" width="265" height="100" rx="7" transform="rotate(0.5 439 304)" fill="#FFFFFF"/>
+          <rect x="584" y="254" width="266" height="100" rx="7" transform="rotate(-0.4 717 304)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="b5bL" x="30" y="80">Timeout</text>
+        <text class="b5bS" x="30" y="96">max 900 s (15 min)</text>
+        <text class="b5bS" x="222" y="64">20 s, the modelled job</text>
+        <text class="b5bB" x="645" y="64" text-anchor="middle">1,200 s (20 min)</text>
+        <text class="b5bB" x="532" y="106" text-anchor="end">moto accepted 901 s; AWS caps at 900</text>
+        <text class="b5bS" x="712" y="83">limit 900 s</text>
+
+        <text class="b5bL" x="30" y="150">Memory</text>
+        <text class="b5bS" x="30" y="166">1 vCPU at 1,769 MB</text>
+        <text class="b5bS" x="266" y="134" text-anchor="middle">1,024 MB, the job</text>
+        <text class="b5bS" x="306" y="174">1,769 MB = one vCPU</text>
+        <text class="b5bS" x="712" y="153">128 to 10,240 MB</text>
+
+        <text class="b5bL" x="30" y="214">/tmp storage</text>
+        <text class="b5bS" x="30" y="230">settable size</text>
+        <text class="b5bS" x="220" y="198">344,273 B used: inside the smallest setting, 512 MB</text>
+        <text class="b5bS" x="712" y="217">512 to 10,240 MB</text>
+
+        <text class="b5bL" x="44" y="276">Payload</text>
+        <text class="b5bS" x="44" y="294">6 MB sync · 1 MB async</text>
+        <text class="b5bS" x="44" y="310">200 MB streamed response</text>
+        <text class="b5bS" x="44" y="326">the event holds bucket + key,</text>
+        <text class="b5bS" x="44" y="342">never the 262,544 B file</text>
+
+        <text class="b5bL" x="321" y="276">Deployment package</text>
+        <text class="b5bS" x="321" y="294">zip 50 MB zipped, 250 MB unzipped</text>
+        <text class="b5bS" x="321" y="310">container image up to 10 GB</text>
+        <text class="b5bS" x="321" y="326">duckdb's size: not measured</text>
+        <text class="b5bS" x="321" y="342">here, so check before you zip</text>
+
+        <text class="b5bL" x="598" y="276">Concurrency</text>
+        <text class="b5bS" x="598" y="294">1,000 at once by default</text>
+        <text class="b5bS" x="598" y="310">new accounts start lower</text>
+        <text class="b5bS" x="598" y="326">one file a day needs one;</text>
+        <text class="b5bS" x="598" y="342">a burst of files needs many</text>
+
+        <text class="b5bN" x="30" y="380">AWS Lambda Developer Guide, "Lambda quotas", read 3 October 2026. Gauges drawn to scale per row.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the timeout is the hard wall; memory and /tmp are dials you pay for; moto checked none of them</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The numbers that box a function in<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>All from AWS's "Lambda quotas" page, read 3 October 2026; quotas change, so re-check before a design depends on one.</p>
+        <ul>
+          <li><strong>Timeout.</strong> "900 seconds (15 minutes)." No setting goes higher. A job that needs longer must be split into smaller pieces or run somewhere else.</li>
+          <li><strong>Memory.</strong> "128 MB to 10,240 MB, in 1-MB increments." CPU comes with memory: "At 1,769 MB, a function has the equivalent of one vCPU."</li>
+          <li><strong><code>/tmp</code>.</strong> "Between 512 MB and 10,240 MB, in 1-MB increments."</li>
+          <li><strong>Package.</strong> A zip of 50 MB zipped and 250 MB unzipped including layers, or a container image up to 10 GB.</li>
+          <li><strong>Payload.</strong> 6 MB each way for a synchronous call, 1 MB for an asynchronous one (not the older 256 KB you may still see quoted), and 200 MB for a streamed response.</li>
+          <li><strong>Concurrency.</strong> 1,000 concurrent executions by default, raisable; and "New AWS accounts have reduced concurrency and memory quotas".</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The 901-second lesson<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Step 4 of the build-along registers a function called <code>too-long</code> with <code>Timeout=901</code>, one second over AWS's ceiling. moto 5.2.3 stored it and printed it back. Real Lambda would refuse that configuration. Nothing is wrong with moto: it is a mock of the API's shape, built so code can run without an account, not a reimplementation of every service's rules. Session 2 met the same edge from the other side, where moto's IAM enforcement was a teaching aid rather than AWS's evaluation engine. The working rule: a green run on a mock proves your code calls the API correctly. It proves nothing about quotas, limits or permissions. Check those against the documentation, in code if you can, and confirm on a real account before anything depends on them.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Memory is also the CPU dial<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The modelled job runs at 1,024 MB, below the 1,769 MB point where the quota page says a function has one full vCPU. A CSV-to-Parquet conversion is CPU work, so more memory may finish the same file faster, and Lambda bills memory times time. Whether a faster run at more memory costs less, the same or more depends on how the job scales, and these pages did not measure that: the 0.04 s in tonight's output is a laptop, not Lambda, and timings vary by machine. Measure two or three memory settings on a real account and price each run with Part 3's formula before choosing.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The backfill that hit fifteen minutes.</strong> A daily handler like tonight's runs for months without a fault, one day's file at a time. Then someone needs a year reprocessed and drops the whole year into <code>raw/</code> as one file. The function times out at 900 seconds, partway through, and writes nothing, because the upload is its last step. Nothing in the code changed; the input outgrew the box. The usual answers are to keep the unit of work small (one day per object, one object per invocation) or to run the backfill as a container job with no Lambda ceiling. The scenario is constructed; the 900-second limit is from "Lambda quotas". How to schedule and orchestrate backfills is taught in <a href="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/">learn-data-orchestration</a>.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers the bill: Lambda against Fargate</span>
+      <h2>Paying per run, or paying to stay on</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Lambda has two meters: $0.20 per 1 million requests, and $0.0000166667 per GB-second of memory times duration, billed to the nearest millisecond. A Fargate container has two different ones: $0.04048 per vCPU-hour and $0.004445 per GB-hour, for as long as it runs, whether or not a file arrives. (All us-east-1, AWS Price List, 3 October 2026; prices change, so re-verify before relying on them.) One prices work done; the other prices time available. The build-along turns both into monthly bills for workloads we chose, which are modelled; the prices are real.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 356" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Monthly cost against invocations a month, from 0 to 150,000. Fargate always on with 1 vCPU and 2 GB is a flat line at 36.04 dollars. Lambda at 20 seconds and 1 GB per run is a rising line from zero, 0.000333534 dollars per run. One file a day costs 0.01 dollars; one a minute, 43,200 runs, costs 14.41 dollars. The lines cross, highlighted, at about 108,000 runs a month, derived by dividing 36.04 by 0.000333534. Prices are us-east-1 from the AWS Price List on 3 October 2026; workloads are modelled and the free tier is not applied.">
+        <defs>
+          <filter id="b5cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b5cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b5cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b5cH { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b5cL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b5cS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b5cB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b5cA { font: 700 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #183177; }
+          .b5cN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b5cH" x="30" y="26">MONTHLY BILL AS RUNS GO UP: LAMBDA AT 20 S AND 1 GB AGAINST FARGATE ALWAYS ON</text>
+        <text class="b5cA" x="30" y="52">$ a month</text>
+
+        <g filter="url(#b5cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M90 60 L90 280 L790 280"/>
+          <path d="M84 240 L90 240 M84 200 L90 200 M84 160 L90 160 M84 120 L90 120 M84 80 L90 80"/>
+          <path d="M323 280 L323 286 M557 280 L557 286 M790 280 L790 286"/>
+          <path d="M90 136 L790 136" stroke="#183177" stroke-width="2.6"/>
+          <path d="M90 280 L790 80"/>
+          <circle cx="90" cy="280" r="4" fill="#FFFFFF"/>
+          <circle cx="292" cy="222" r="4" fill="#FFFFFF"/>
+          <circle cx="594" cy="136" r="7" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="b5cS" x="80" y="284" text-anchor="end">$0</text>
+        <text class="b5cS" x="80" y="244" text-anchor="end">$10</text>
+        <text class="b5cS" x="80" y="204" text-anchor="end">$20</text>
+        <text class="b5cS" x="80" y="164" text-anchor="end">$30</text>
+        <text class="b5cS" x="80" y="124" text-anchor="end">$40</text>
+        <text class="b5cS" x="80" y="84" text-anchor="end">$50</text>
+        <text class="b5cS" x="90" y="300" text-anchor="middle">0</text>
+        <text class="b5cS" x="323" y="300" text-anchor="middle">50,000</text>
+        <text class="b5cS" x="557" y="300" text-anchor="middle">100,000</text>
+        <text class="b5cS" x="790" y="300" text-anchor="middle">150,000</text>
+        <text class="b5cA" x="790" y="318" text-anchor="end">invocations a month</text>
+
+        <text class="b5cL" x="100" y="126">Fargate always on, 1 vCPU 2 GB: $36.04 a month</text>
+        <text class="b5cL" x="360" y="238">Lambda, 20 s at 1 GB: $0.000333534 a run</text>
+        <text class="b5cS" x="96" y="240">one a day: $0.01</text>
+        <text class="b5cS" x="282" y="214" text-anchor="end">one a minute: $14.41</text>
+        <text class="b5cB" x="604" y="160">crossover: about 108,000 runs a month</text>
+        <text class="b5cS" x="604" y="176">derived: $36.04 / $0.000333534</text>
+
+        <text class="b5cN" x="30" y="342">us-east-1, AWS Price List, 3 October 2026; re-verify. Workloads modelled, prices real, free tier not applied.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - left of the orange dot the function is cheaper; right of it the container is, before you count anything but the bill</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Three bills from the build-along<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The script prices one modelled job, 20 seconds at 1 GB per file, at two rates, and one container left running all month (730 hours):</p>
+        <ul>
+          <li><strong>One file a day.</strong> 30 runs, 600 GB-seconds: <strong>$0.01 a month</strong> on Lambda.</li>
+          <li><strong>One file a minute.</strong> 43,200 runs, 864,000 GB-seconds: <strong>$14.41 a month</strong>. Almost all of it is duration; the requests come to under one cent.</li>
+          <li><strong>A container always on, 1 vCPU and 2 GB.</strong> 730 x (1 x $0.04048 + 2 x $0.004445): <strong>$36.04 a month</strong> on Fargate, the same whether it handles one file or a hundred thousand.</li>
+        </ul>
+        <p>All three at us-east-1 prices from the AWS Price List, 3 October 2026; re-verify before relying on them. The workloads are modelled: your job's duration and memory are what move these numbers, so your numbers will differ.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Where the lines cross<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>One run of the modelled job costs 20 x 1 x $0.0000166667 + $0.0000002 = $0.000333534. Divide the container's $36.04 by that and the lines meet at about 108,000 runs a month, roughly two and a half a minute, around the clock. That figure is derived from the numbers above, not measured, and it moves with every input: halve the duration and the crossover doubles. Below it, paying per run wins; above it, paying to stay on wins, on the bill alone. The bill is not the only argument. A container has no 900-second ceiling from Lambda's quota page, which settles a 20-minute job before any price is compared. Fargate's own limits and how to run containers on ECS are outside these pages.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the free tier changes<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Lambda's pricing page says "The free tier includes one million requests and 400,000 GB-seconds per month." The script does not apply it. If your account has it, one file a day (600 GB-seconds) costs nothing at all. One file a minute uses 864,000 GB-seconds, so 464,000 are billed: about $7.73 a month, derived from the price per GB-second, with every request inside the free million. Because the free tier is a fixed monthly allowance, it shifts where the lines cross without changing how steeply Lambda's line climbs.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The every-minute poller.</strong> A team's daily conversion is so cheap it is invisible: about a cent a month. A stakeholder asks for fresher data, so the job is rescheduled to check every minute, still at about 20 seconds a run. The bill moves to $14.41, still well under a container that is always on, and nobody needs to change platform. The conversation that matters comes when volume heads toward the crossover, around 108,000 runs a month for this job, or when a single run approaches fifteen minutes. The scenario is constructed; the bills are the build-along's modelled workloads at real prices. If the real ask is continuous, sub-minute freshness, that is a streaming design, taught in <a href="https://phoebefu6.github.io/learn-streaming-data-with-phoebe/">learn-streaming-data</a>.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>A handler on a mocked bucket, then the bill</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">One Python file, about fifty lines, a few seconds to run. It writes the 15 January slice of the sample as CSV, uploads it to <code>raw/</code> in a moto bucket, invokes the handler with a hand-made S3 event, registers the function with moto's Lambda (twice, once with a timeout AWS would refuse), and prices three workloads. The output below is pasted from a real run of exactly this code. Before you run it, guess how much smaller the Parquet will be.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 264" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along pipeline. The sample is filtered to 15 January and copied to day.csv. It is uploaded to the moto bucket acme-lake under raw/nyc_taxi/2024-01-15.csv. The highlighted handler downloads, converts and uploads. The result is curated/nyc_taxi/2024-01-15.parquet, 81,729 bytes. Below, create_function registers the function with moto, which stores the configuration and runs no code, and lambda_month and fargate_month turn prices and time into a monthly bill.">
+        <defs>
+          <filter id="b5dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="73" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b5dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b5dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b5dL { font: 600 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #232F3E; }
+          .b5dS { font: 400 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+          .b5dB { font: 800 11px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5C3300; }
+          .b5dW { font: 800 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #FFFFFF; }
+          .b5dN { font: 400 12px Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#b5dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="50" width="170" height="90" rx="8" transform="rotate(-1 115 95)" fill="#FFFFFF"/>
+          <rect x="30" y="124" width="170" height="14" rx="3" fill="url(#b5dHc)"/>
+          <rect x="230" y="50" width="170" height="90" rx="8" transform="rotate(0.8 315 95)" fill="#EEF1FA"/>
+          <rect x="430" y="50" width="190" height="90" rx="8" transform="rotate(-0.6 525 95)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="650" y="50" width="200" height="90" rx="8" transform="rotate(0.5 750 95)" fill="#183177" stroke="#183177"/>
+          <rect x="30" y="180" width="390" height="40" rx="6" transform="rotate(-0.3 225 200)" fill="#FFFFFF"/>
+          <rect x="450" y="180" width="400" height="40" rx="6" transform="rotate(0.3 650 200)" fill="#EEF1FA"/>
+          <path d="M206 95 L224 95" marker-end="url(#b5dAr)"/>
+          <path d="M406 95 L424 95" marker-end="url(#b5dAr)"/>
+          <path d="M626 95 L644 95" marker-end="url(#b5dAr)"/>
+        </g>
+
+        <text class="b5dL" x="44" y="74">the sample</text>
+        <text class="b5dS" x="44" y="96">15 January only</text>
+        <text class="b5dS" x="44" y="114">COPY ... TO day.csv</text>
+
+        <text class="b5dL" x="244" y="74">moto S3: acme-lake</text>
+        <text class="b5dS" x="244" y="96">raw/nyc_taxi/</text>
+        <text class="b5dS" x="244" y="114">2024-01-15.csv</text>
+
+        <text class="b5dL" x="444" y="74">handler(event)</text>
+        <text class="b5dB" x="444" y="96">download, COPY,</text>
+        <text class="b5dB" x="444" y="114">upload to curated/</text>
+
+        <text class="b5dW" x="664" y="74">curated/nyc_taxi/</text>
+        <text class="b5dW" x="664" y="96">2024-01-15.parquet</text>
+        <text class="b5dW" x="664" y="118">81,729 B</text>
+
+        <text class="b5dL" x="44" y="205">create_function: moto stores config, runs no code</text>
+        <text class="b5dL" x="464" y="205">lambda_month(), fargate_month(): the bill</text>
+
+        <text class="b5dN" x="30" y="250">The handler runs for real on moto S3; the Lambda service is only registered, and the bill is arithmetic.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange step is real code doing real work; the row below it is configuration and arithmetic</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Reuse the environment from analyst session 1.</strong> Same folder, same <code>.venv</code>, same pinned versions; moto was installed there with its <code>awslambda</code> extra, so nothing new to install. This script reads <code>yellow_tripdata_2024-01_sample.parquet</code> from the folder and writes <code>day.csv</code> next to it. The handler writes to <code>/tmp</code> the way a Lambda function does, so run it on macOS or Linux, or change the two <code>/tmp</code> paths on Windows.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · setup (verified 3 October 2026)</span>. .venv/bin/activate
+python -c "import moto, duckdb; print(moto.__version__, duckdb.__version__)"   # expect 5.2.3 1.5.6
+ls yellow_tripdata_2024-01_sample.parquet   # 2,776,217 bytes, from session 1</div>
+      </div>
+      <div class="step">
+        <p><strong>The prices and the handler.</strong> The four prices sit at the top with their source and date, so the bill at the end can be re-checked in one place. The handler is exactly the one from Part 1: read the event, download, convert, upload, report sizes.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · b5_lambda.py, part 1</span># Analyst session 5 - Lambda or a container. The handler runs locally on moto S3; the bill uses real prices.
+import io, json, os, time, zipfile, boto3, duckdb
+from moto import mock_aws
+
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+# us-east-1, AWS Price List, retrieved 2026-10-03
+LAMBDA_REQ, LAMBDA_GBS = 0.20 / 1e6, 0.0000166667
+FARGATE_VCPU_HR, FARGATE_GB_HR = 0.04048, 0.004445
+
+def handler(event, context=None):
+    """S3 put event -&gt; read the CSV that landed -&gt; write it back as Parquet under curated/."""
+    s3 = boto3.client("s3")
+    rec = event["Records"][0]["s3"]
+    bucket, key = rec["bucket"]["name"], rec["object"]["key"]
+    s3.download_file(bucket, key, "/tmp/in.csv")
+    duckdb.execute("COPY (SELECT * FROM read_csv_auto('/tmp/in.csv')) TO '/tmp/out.parquet' (FORMAT parquet)")
+    out_key = key.replace("raw/", "curated/").replace(".csv", ".parquet")
+    s3.upload_file("/tmp/out.parquet", bucket, out_key)
+    return {"in": key, "out": out_key, "bytes_in": os.path.getsize("/tmp/in.csv"), "bytes_out": os.path.getsize("/tmp/out.parquet")}</div>
+      </div>
+      <div class="step">
+        <p><strong>Land a file and fire the event by hand.</strong> Inside <code>mock_aws()</code> every boto3 call goes to moto. The script cuts 15 January out of the sample, uploads it to <code>raw/</code>, then calls the handler with an event shaped like the one S3 sends: a list of records, each naming a bucket and a key. The timer measures your laptop, not Lambda.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · b5_lambda.py, part 2</span>with mock_aws():
+    s3 = boto3.client("s3"); s3.create_bucket(Bucket="acme-lake")
+    duckdb.execute("COPY (SELECT * FROM 'yellow_tripdata_2024-01_sample.parquet' WHERE CAST(tpep_pickup_datetime AS DATE) = DATE '2024-01-15') TO 'day.csv' (HEADER)")
+    s3.upload_file("day.csv", "acme-lake", "raw/nyc_taxi/2024-01-15.csv")
+    t0 = time.perf_counter()
+    print(handler({"Records": [{"s3": {"bucket": {"name": "acme-lake"}, "object": {"key": "raw/nyc_taxi/2024-01-15.csv"}}}]}))
+    print(f"handler ran in {time.perf_counter() - t0:.2f} s on this laptop")</div>
+      </div>
+      <div class="step">
+        <p><strong>Register it as a Lambda function, then register one AWS would refuse.</strong> Still inside the <code>with</code> block. A Lambda function needs an execution role that Lambda is allowed to assume, so the script creates one with the trust policy shown. The zip holds a stand-in handler: moto checks the configuration, it does not run your code here. The second call asks for 901 seconds.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · b5_lambda.py, part 3</span>    # Register it as a Lambda function; moto checks the configuration, it does not run your code here
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("handler.py", "def handler(event, context):\n    return event\n")
+    iam = boto3.client("iam")
+    role = iam.create_role(RoleName="ingest-role", AssumeRolePolicyDocument=json.dumps({"Version": "2012-10-17", "Statement": [
+        {"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]}))["Role"]["Arn"]
+    lam = boto3.client("lambda")
+    cfg = lam.create_function(FunctionName="ingest", Runtime="python3.12", Role=role, Handler="handler.handler",
+                              Code={"ZipFile": buf.getvalue()}, Timeout=900, MemorySize=1024)
+    print("registered:", cfg["FunctionName"], "| timeout", cfg["Timeout"], "s | memory", cfg["MemorySize"], "MB")
+    bad = lam.create_function(FunctionName="too-long", Runtime="python3.12", Role=role, Handler="handler.handler",
+                              Code={"ZipFile": buf.getvalue()}, Timeout=901, MemorySize=1024)
+    print("moto also accepted a", bad["Timeout"], "s timeout; real Lambda caps it at 900 s. A mock is not a quota check.")</div>
+      </div>
+      <div class="step">
+        <p><strong>Price three workloads.</strong> <code>lambda_month</code> is requests plus GB-seconds; <code>fargate_month</code> is vCPU-hours plus GB-hours for 730 hours. The workloads are modelled choices; change them to your own job's numbers.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · b5_lambda.py, part 4</span>def lambda_month(invocations, seconds, memory_mb):
+    return invocations * LAMBDA_REQ + invocations * seconds * memory_mb / 1024 * LAMBDA_GBS
+
+def fargate_month(vcpu, gb, hours=730):
+    return hours * (vcpu * FARGATE_VCPU_HR + gb * FARGATE_GB_HR)
+
+print("one file a day, 20 s at 1 GB:      Lambda ${:,.2f}/month".format(lambda_month(30, 20, 1024)))
+print("one file a minute, 20 s at 1 GB:   Lambda ${:,.2f}/month".format(lambda_month(43200, 20, 1024)))
+print("a container always on, 1 vCPU 2 GB: Fargate ${:,.2f}/month".format(fargate_month(1, 2)))</div>
+      </div>
+      <div class="step">
+        <p><strong>Run it and compare with this real output.</strong> Your byte counts match exactly if your DuckDB version and sample match. The timing line will not: it measures whatever machine you run on, and timings vary by machine.</p>
+        <div class="prompt-box good"><span class="label">★ Step 6 · python b5_lambda.py (real output)</span>{'in': 'raw/nyc_taxi/2024-01-15.csv', 'out': 'curated/nyc_taxi/2024-01-15.parquet', 'bytes_in': 262544, 'bytes_out': 81729}
+handler ran in 0.04 s on this laptop
+registered: ingest | timeout 900 s | memory 1024 MB
+moto also accepted a 901 s timeout; real Lambda caps it at 900 s. A mock is not a quota check.
+one file a day, 20 s at 1 GB:      Lambda $0.01/month
+one file a minute, 20 s at 1 GB:   Lambda $14.41/month
+a container always on, 1 vCPU 2 GB: Fargate $36.04/month</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>On a real Free Tier account (optional).</strong> Needs an AWS account: AWS says most new customers are not asked for a card on the Free plan, some are, and a Paid plan needs one. Three things change from the mock. First, the function needs a real execution role: the trust policy from Step 4, plus read on <code>raw/</code> and write on <code>curated/</code> written the way session 2 wrote policies. Second, the deployment package must actually contain DuckDB built for Lambda's Linux runtime, either in a zip (50 MB zipped, 250 MB unzipped, including layers) or in a container image up to 10 GB; check the zip's size before uploading, since these pages did not measure it. Third, add the S3 trigger with a prefix filter of <code>raw/</code> and a suffix filter of <code>.csv</code>, set memory to 1,024 MB and a timeout well under 900 seconds, and upload one day's CSV. A handful of test runs sits far inside Lambda's free tier of one million requests and 400,000 GB-seconds a month; past it, $0.20 per 1 million requests and $0.0000166667 per GB-second, and S3 at $0.023 per GB-month and $0.005 per 1,000 PUTs (us-east-1, AWS Price List, 3 October 2026; prices change, so re-verify before relying on them). On the Free plan this scale is covered. Delete the function, its role and the bucket's objects when you are done.</p>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The trigger that listens to its own output</span>{"LambdaFunctionConfigurations": [{
+    "LambdaFunctionArn": "arn:aws:lambda:us-east-1:111122223333:function:ingest",
+    "Events": ["s3:ObjectCreated:*"]}]}
+# No Filter block: the upload to curated/ is also "ObjectCreated", so the function wakes on its own writes.
+# Add a Filter with prefix raw/ and suffix .csv.</div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 6</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Prove it is idempotent.</strong> Inside the <code>with</code> block, call the handler a second time with the same event, then list <code>curated/</code> with <code>list_objects_v2</code>. You should find one object, still 81,729 bytes. Now change the output key to include <code>time.time()</code>, rerun, and count again.</li>
+      <li><strong>Feed it a key it was not built for.</strong> Upload the same file as <code>landing/2024-01-15.csv</code> and call the handler with that key. Where does the output land, and why is that dangerous? Add one guard line that refuses any key not starting with <code>raw/</code>.</li>
+      <li><strong>Move the crossover.</strong> Change the modelled job to 5 seconds at 512 MB. Compute the cost of one run with <code>lambda_month(1, 5, 512)</code>, then divide $36.04 by it. How far did the crossover move from about 108,000 runs a month, and what does that tell you about where the bill really comes from?</li>
+      <li><strong>Place one job from work on the chart.</strong> Pick a scheduled job your team runs. Write down its runs a month, its typical duration, its memory and its longest-ever run. Does it fit inside 900 seconds with room to spare? Which side of its own crossover is it on?</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 5 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · A nightly conversion takes 20 minutes per file. What happens if you deploy it unchanged as a Lambda function?</p>
+      <button class="qopt" type="button">A · It runs to completion and is simply billed for 20 minutes of GB-seconds</button>
+      <button class="qopt" type="button">B · It cannot finish in one invocation: Lambda's timeout tops out at 900 seconds, so split the work or run it in a container</button>
+      <button class="qopt" type="button">C · Raising memory to 10,240 MB raises the timeout limit with it</button>
+      <button class="qopt" type="button">D · Lambda extends the timeout automatically for S3-triggered functions</button>
+      <p class="qwhy">"Lambda quotas" sets the timeout at "900 seconds (15 minutes)" with no higher setting. Memory buys CPU, not time. A 1,200-second job is outside the box before any price is compared.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · The build-along registered a function with a 901-second timeout on moto and it succeeded. What does that tell you?</p>
+      <button class="qopt" type="button">A · AWS raised the timeout limit and moto reflects it</button>
+      <button class="qopt" type="button">B · Timeouts are only enforced for functions that are actually invoked</button>
+      <button class="qopt" type="button">C · The limit only applies to the python3.12 runtime</button>
+      <button class="qopt" type="button">D · Nothing about AWS's limits: moto stored a configuration real Lambda would refuse, because a mock is not a quota check</button>
+      <p class="qwhy">moto mocks the API's shape so code can run without an account. It does not enforce every quota. Check limits against the documentation and a real account, never against a green run on a mock.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · A job runs 20 seconds at 1 GB per file. When does a Fargate container that is always on (1 vCPU, 2 GB, $36.04 a month) become cheaper than Lambda on the bill alone?</p>
+      <button class="qopt" type="button">A · Above about 108,000 runs a month: $36.04 divided by $0.000333534 per run</button>
+      <button class="qopt" type="button">B · Never: Lambda is always cheaper because it bills by the millisecond</button>
+      <button class="qopt" type="button">C · Above one run a minute, 43,200 runs a month</button>
+      <button class="qopt" type="button">D · As soon as the job runs more than once a day</button>
+      <p class="qwhy">One minute costs $14.41 on Lambda, still under $36.04. The lines cross at about 108,000 runs, derived from the two prices for this modelled job; a job longer than 900 seconds settles the question before the bill does.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">262,544 B in, 81,729 B out; moto accepting a 901 s timeout</span><span class="note">Measured in this build with moto 5.2.3, boto3 1.43.108 and DuckDB 1.5.6 on the 100,000-row seeded sample; the code shown is the code that printed them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Timeout, memory, one vCPU at 1,769 MB, /tmp, package, payload, concurrency, new-account caveat</span><span class="note">AWS Lambda Developer Guide, "Lambda quotas", read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">$0.20 per 1M requests, $0.0000166667 per GB-second; Fargate $0.04048 per vCPU-hour, $0.004445 per GB-hour</span><span class="note">AWS Price List bulk API, us-east-1 offers for AWSLambda and AmazonECS, retrieved 3 October 2026; re-verify before relying on them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Per-millisecond billing and the free tier of 1M requests and 400,000 GB-seconds</span><span class="note">Lambda pricing page, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The Free plan card wording</span><span class="note">AWS Free Tier FAQs, read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">$0.01, $14.41 and $36.04 a month</span><span class="note">Modelled workloads (20 s at 1 GB; Fargate 730 hours) at real prices, printed by the build-along; free tier not applied</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Crossover about 108,000 runs; $7.73 with the free tier; 31.1% size ratio; 344,273 B in /tmp</span><span class="note">Derived arithmetic from the numbers above, not measured</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">S3 event delivery, /tmp persistence between runs, memory versus speed</span><span class="note">Not verified at source or measured here; taught as design habits, not as AWS facts</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The self-feeding function, the backfill at fifteen minutes, the every-minute poller</span><span class="note">Constructed; the limits and prices behind each are quoted at source</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 5 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The handler</b><span>Event gives bucket + key; download to /tmp, DuckDB COPY to Parquet, upload to curated/.</span></div>
+      <div class="cheat-item"><b>Zones keep it safe</b><span>Trigger on prefix raw/ and suffix .csv; write to curated/. Output key derived from input key.</span></div>
+      <div class="cheat-item"><b>The hard wall</b><span>Timeout 900 s. Memory 128 to 10,240 MB; one vCPU at 1,769 MB. /tmp 512 to 10,240 MB.</span></div>
+      <div class="cheat-item"><b>A mock is not a quota check</b><span>moto accepted 901 s. Check limits against "Lambda quotas" and a real account.</span></div>
+      <div class="cheat-item"><b>Two meters each</b><span>Lambda $0.20 per 1M requests + $0.0000166667 per GB-s; Fargate $0.04048 vCPU-h + $0.004445 GB-h (us-east-1, 3 Oct 2026).</span></div>
+      <div class="cheat-item"><b>Where they cross</b><span>20 s at 1 GB: $0.000333534 a run; about 108,000 runs a month equals $36.04 of Fargate (derived).</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Tonight compared paying per run with paying to stay on. Session 6 asks the same question of the query engines: Athena bills bytes, Redshift Serverless bills time with a 60-second minimum. With modelled workloads at real prices, the break-even lands at about 31 and 123 queries a day, and an idle warehouse turns a 5-second query into a minute's bill.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 5 of 8 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b4-athena-pay-per-byte.html">← Prev: Athena: pay per byte scanned</a> &nbsp;·&nbsp; <a href="b6-redshift-or-athena.html">Next: Redshift or Athena →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

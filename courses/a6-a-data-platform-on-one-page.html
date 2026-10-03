@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 6 of 6. A data platform on one page: S3 zones, the Glue catalog, Athena, Redshift Serverless, Lambda ingest, IAM roles, Budgets and Bedrock on one drawing, each box with a meter and an owner; what the Well-Architected Data Analytics Lens is still good for; and six questions to ask any AWS data proposal.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="A data platform on one page - learn aws with phoebe">
+<meta property="og:description" content="Leader session 6 of 6. The whole platform on one drawing, every box with its meter and an owner, the Lens read as principles, and six questions that make a proposal answer with numbers.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/a6-a-data-platform-on-one-page.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A data platform on one page - learn aws with phoebe">
+<meta name="twitter:description" content="Leader session 6 of 6. One drawing, one meter and one owner per box, and six questions for any AWS data proposal.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 6 · A data platform on one page - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Leader session 6 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Leader track · Session 6 of 6</div>
+    <h1>A data platform on <span class="accent">one page</span></h1>
+    <p class="sub">Five sessions, five sheets: a map of your stack, a lifecycle policy, an access matrix, five jobs sorted by meter, a five-line guardrail plan. Tonight they go onto one drawing. Every box gets the meter it runs on and the name of the person who owns it, and the drawing gets two rows underneath: who can touch what, and what the busiest question costs. Then we test it the way a data leader should test anyone's AWS proposal, with six questions that only accept a number or a name as an answer.</p>
+    <div class="chip-row">
+      <span class="chip level">🔴 Capstone</span>
+      <span class="chip audience">Data and AI leaders, managers, architects</span>
+      <span class="chip audience">No code, no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · The platform, the Lens, six questions</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: your platform on one page</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">A platform diagram usually fails in one of two ways. It is a wall of logos with arrows, which says what was bought but not what it costs or who answers for it. Or it is a 40-page design document nobody outside the platform team reads. The one-page version sits between them: the handful of boxes a data team actually runs, and on each box exactly two facts, the meter it bills on and the owner. Session 1 drew the boxes. Sessions 2 to 5 gave each one its rules. Tonight we assemble them, check the drawing against AWS's own Well-Architected Data Analytics Lens, and turn the result into six questions you can put to any proposal.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> Your data platform on one page: storage zones, catalog, engines, ingest, identity, budgets and the AI box, each with its meter and a named owner, plus a security row (how many actions your analyst role can take, and which explicit Denies are the floor) and a cost row (what your busiest dashboard costs a month). And six questions, written on the back, that you will ask the next time someone brings you an AWS data proposal.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the one-page platform</span>
+      <h2>The whole platform, one drawing</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">The Well-Architected Data Analytics Lens puts the founding idea in one line: "Decoupling storage from compute allows you to manage the cost of storage and compute separately" (best practice 11.1). That is the shape of the drawing. One lake in S3, split into zones by what the bytes are for. One catalog that says where everything is. Several engines that read the same files, each on its own meter. Identity wrapped around all of it, and a budget watching every meter at once. Bedrock sits beside the engines as one more reader of the curated zone.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The data platform on one page. Sources feed Lambda ingest, billed per request and GB-second, which writes into the S3 lake, billed 0.023 dollars per GB-month in Standard plus requests. The lake has four zones: raw for landing CSV, curated for Parquet partitioned by day, highlighted because every engine reads it, results for query outputs, and archive in Deep Archive. Below the lake, the Glue Data Catalog at 1 dollar per 100,000 objects indexes it, and three engines read curated: Athena at 5 dollars per TB scanned with a 10 MB minimum, Redshift Serverless at 0.375 dollars per RPU-hour with a 60 second minimum for dashboards, and Bedrock for AI work billed per 1,000 tokens. Every box has an empty owner slot. Two bands run underneath: IAM roles, through which every arrow runs, with explicit Denies as the floor; and Budgets plus activated tags watching every meter.">
+        <defs>
+          <filter id="a6aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="163" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a6aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a6aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a6aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a6aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a6aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a6aB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a6aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a6aH" x="30" y="26">THE WHOLE PLATFORM ON ONE PAGE: EVERY BOX WITH ITS METER AND AN OWNER SLOT</text>
+
+        <g filter="url(#a6aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="60" width="120" height="70" rx="6" transform="rotate(-1 90 95)" fill="#FFFFFF"/>
+          <rect x="180" y="60" width="150" height="70" rx="6" transform="rotate(1 255 95)" fill="#FFFFFF"/>
+          <path d="M152 95 L176 95" marker-end="url(#a6aAr)"/>
+          <path d="M332 95 L368 95" marker-end="url(#a6aAr)"/>
+          <rect x="360" y="44" width="490" height="132" rx="8" transform="rotate(-0.4 605 110)" fill="#FFFFFF"/>
+          <rect x="372" y="76" width="100" height="66" rx="5" transform="rotate(-1.5 422 109)" fill="#FFFFFF"/>
+          <rect x="492" y="76" width="100" height="66" rx="5" transform="rotate(1.2 542 109)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="612" y="76" width="100" height="66" rx="5" transform="rotate(-1 662 109)" fill="#EEF1FA"/>
+          <rect x="732" y="76" width="100" height="66" rx="5" transform="rotate(1.4 782 109)" fill="#EEF1FA"/>
+          <path d="M475 109 L489 109" marker-end="url(#a6aAr)"/>
+          <path d="M372 180 L140 212" stroke="#183177" stroke-dasharray="6 5"/>
+          <path d="M522 180 L372 212" marker-end="url(#a6aAr)"/>
+          <path d="M545 180 L558 212" marker-end="url(#a6aAr)"/>
+          <path d="M570 180 L748 212" marker-end="url(#a6aAr)"/>
+          <rect x="30" y="214" width="200" height="84" rx="6" transform="rotate(-0.8 130 256)" fill="#FFFFFF"/>
+          <rect x="260" y="214" width="180" height="84" rx="6" transform="rotate(0.7 350 256)" fill="#FFFFFF"/>
+          <rect x="470" y="214" width="180" height="84" rx="6" transform="rotate(-0.6 560 256)" fill="#FFFFFF"/>
+          <rect x="680" y="214" width="170" height="84" rx="6" transform="rotate(0.8 765 256)" fill="#FFFFFF"/>
+          <rect x="30" y="314" width="820" height="36" rx="6" transform="rotate(-0.2 440 332)" fill="#EEF1FA"/>
+          <rect x="30" y="362" width="820" height="36" rx="6" transform="rotate(0.2 440 380)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="a6aL" x="42" y="84">Sources</text>
+        <text class="a6aS" x="42" y="102">apps and files</text>
+        <text class="a6aS" x="42" y="120">no AWS meter</text>
+
+        <text class="a6aL" x="192" y="84">Lambda ingest</text>
+        <text class="a6aS" x="192" y="102">per request + GB-s</text>
+        <text class="a6aS" x="192" y="120">owner: ________</text>
+
+        <text class="a6aL" x="374" y="64">S3 lake</text>
+        <text class="a6aS" x="440" y="64">$0.023 per GB-month (Standard) + requests</text>
+        <text class="a6aL" x="384" y="98">raw/</text>
+        <text class="a6aS" x="384" y="116">landing CSV</text>
+        <text class="a6aL" x="504" y="98">curated/</text>
+        <text class="a6aB" x="504" y="116">Parquet,</text>
+        <text class="a6aB" x="504" y="132">by day</text>
+        <text class="a6aL" x="624" y="98">results/</text>
+        <text class="a6aS" x="624" y="116">query outputs</text>
+        <text class="a6aL" x="744" y="98">archive/</text>
+        <text class="a6aS" x="744" y="116">Deep Archive</text>
+        <text class="a6aS" x="374" y="164">owner: ________</text>
+        <text class="a6aS" x="560" y="164">lifecycle moves raw/ to archive/</text>
+
+        <text class="a6aL" x="44" y="236">Glue Data Catalog</text>
+        <text class="a6aS" x="44" y="254">$1 per 100,000 objects</text>
+        <text class="a6aS" x="44" y="270">+ $1 per million requests</text>
+        <text class="a6aS" x="44" y="288">owner: ________</text>
+
+        <text class="a6aL" x="274" y="236">Athena · ad hoc</text>
+        <text class="a6aS" x="274" y="254">$5.00 per TB scanned</text>
+        <text class="a6aS" x="274" y="270">10 MB minimum per query</text>
+        <text class="a6aS" x="274" y="288">owner: ________</text>
+
+        <text class="a6aL" x="484" y="236">Redshift Serverless</text>
+        <text class="a6aS" x="484" y="254">$0.375 per RPU-hour</text>
+        <text class="a6aS" x="484" y="270">60 s minimum, dashboards</text>
+        <text class="a6aS" x="484" y="288">owner: ________</text>
+
+        <text class="a6aL" x="694" y="236">Bedrock · AI work</text>
+        <text class="a6aS" x="694" y="254">per 1K tokens in + out</text>
+        <text class="a6aS" x="694" y="270">batch 50% lower</text>
+        <text class="a6aS" x="694" y="288">owner: ________</text>
+
+        <text class="a6aL" x="44" y="337">IAM roles</text>
+        <text class="a6aS" x="140" y="337">every arrow above runs as a role; explicit Denies such as DeleteBucket are the floor</text>
+        <text class="a6aL" x="44" y="385">Budgets + tags</text>
+        <text class="a6aS" x="160" y="385">actual and forecast alerts across every meter; tag keys activated before the month</text>
+
+        <text class="a6aN" x="30" y="424">Prices us-east-1, AWS Price List, 3 Oct 2026; re-verify. Owner slots are left blank on purpose.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange zone is the one every engine reads, so its layout sets most of the bill; each blank owner slot is a question for your team</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Four zones and one catalog<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The lake is one or a few S3 buckets split by key prefix into zones that each have one job. <strong>raw/</strong> is where files land, as they arrived. <strong>curated/</strong> is the cleaned, converted copy, Parquet partitioned by the column people filter on, and it is the zone every engine reads. <strong>results/</strong> holds query outputs. <strong>archive/</strong> is where a lifecycle rule sends what nobody rereads. Session 2 priced the floor: a terabyte in S3 Standard costs $23.55 a month, against $1.01 in Deep Archive (us-east-1, AWS Price List, 3 October 2026; re-verify before relying on either).</p>
+        <p>Beside the lake sits the Glue Data Catalog, which "stores metadata about your organization's data sets" and acts as "an index to the location, schema, and runtime metrics" (AWS Glue Developer Guide, "AWS Glue Data Catalog"). Athena, Redshift Spectrum and EMR all read the same catalog, which is why it is one box, not one per engine. It costs $1 per 100,000 objects a month beyond the free tier and $1 per million requests (us-east-1, AWS Price List, 3 October 2026; re-verify). The Lens calls a central catalog "an integral part of data governance" (best practice 7.1).</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Three engines, three meters<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Each engine is there because it bills differently, and session 4 sorted jobs by exactly that. <strong>Athena</strong> for ad hoc questions bills bytes: $5.00 per TB scanned with a 10 MB minimum per query, and nothing while nobody asks. <strong>Redshift Serverless</strong> for dashboards bills time: $0.375 per RPU-hour, per second with a 60-second minimum, and no compute charge while no queries run. <strong>Lambda</strong> for ingest bills requests and GB-seconds: $0.20 per million requests and $0.0000166667 per GB-second. All prices us-east-1, AWS Price List, 3 October 2026; re-verify before relying on them.</p>
+        <p>The meter decides what a habit costs. Modelled in analyst session 5: a Lambda converting one file a day for 20 seconds at 1 GB costs about $0.01 a month, one a minute about $14.41, and a Fargate container kept on for the same job $36.04. The shape matters more than the logo: the same engine can be the cheapest box on the page or the most expensive, depending on how often it runs.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Identity, budgets and the AI box<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Two bands run under every box, because they apply to all of them. <strong>IAM roles</strong>: every arrow on the drawing is a request made by some role, and session 3 showed that "By default, all requests are implicitly denied" and "An explicit deny overrides an explicit allow" (AWS IAM User Guide, "Policy evaluation logic"). <strong>Budgets and tags</strong>: one budget with an actual and a forecast alert watches every meter, and activated cost allocation tags say whose spend it was. Both bands are on the customer's side of the shared responsibility model, which AWS describes as security "in" the cloud.</p>
+        <p><strong>Bedrock</strong> is "a fully managed service that provides secure, enterprise-grade access to high-performing foundation models" and "supports 100+ foundation models" (Amazon Bedrock User Guide, "What is Amazon Bedrock?"). On the drawing it is one more reader of curated/, with its own meter per thousand tokens. What a Claude model on Bedrock specifically offers is taught in <a href="https://phoebefu6.github.io/learn-claude-with-phoebe/courses/68-bedrock-vertex.html">learn Claude session 68</a>; the inference infrastructure underneath belongs to <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/">learn AI infra</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What is deliberately not on the page<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>No streaming box: Kinesis and Kafka are taught in <a href="https://phoebefu6.github.io/learn-streaming-data-with-phoebe/">learn streaming data</a>. No scheduler box: orchestration has its own home in <a href="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/">learn data orchestration</a>. No model of facts and dimensions inside Redshift: that is <a href="https://phoebefu6.github.io/learn-data-warehouse-with-phoebe/">learn data warehouse</a>. EMR, SageMaker, Lake Formation permissions, Iceberg tables, VPC design and cross-account access are not covered on these pages either. If a proposal you are reviewing leans on one of them, the six questions in Part 3 still apply; the detail behind the answers needs its own study.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Two proposals, one priced by storage only.</strong> Two vendors pitch the same analytics platform for a terabyte of trip data. The first quotes $23.55 a month: a terabyte in S3 Standard, which is accurate and is the whole quote. The second draws the one-page platform, puts a meter on every box, and prices the busiest dashboard question at 100 runs a day: $15,000 a month if it reads raw CSV, $88 if it reads curated Parquet partitioned by day (modelled from measured bytes; us-east-1, AWS Price List, 3 October 2026). The cheaper-looking proposal had simply stopped at the cheapest meter. Constructed; the figures are the modelled canon from analyst sessions 4 and 8, and your numbers will differ.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the Well-Architected Data Analytics Lens</span>
+      <h2>Six pillars, read as principles</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">AWS's Well-Architected Data Analytics Lens describes itself as "a collection of customer-proven best practices for designing well-architected analytics workloads". It is organised into six pillars, and it is the document a reviewer will reach for to check a drawing like yours. Use it, but read the date first: its last major update is December 22, 2023, first published May 20, 2020, and no later revision is listed. On 3 October 2026 that makes it almost three years old. Its principles have aged well; its product details have not been kept current, so check those against today's service pages.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 372" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A checklist strip of the Lens's six pillars, each with a tick box and the platform box to check first: operational excellence, Lambda ingest; security, IAM roles; reliability, storage class; performance efficiency, curated layout; cost optimization, Budgets and tags; sustainability, lifecycle rules. Below, five quoted best practices, each tied to a box: BP 11.1, manage the cost of storage and compute separately, S3 apart from engines; BP 10.4, a full table scan is avoided, curated partitions; BP 7.1, a central catalog is an integral part of data governance, Glue Data Catalog; BP 5.2, giving only enough access for systems to do the job, IAM roles; BP 13.1, use S3 Lifecycle configurations to expire data automatically, raw and archive. An orange tab gives the date: last major update 22 December 2023, first published 20 May 2020, almost three years old on 3 October 2026.">
+        <defs>
+          <filter id="a6bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="173" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a6bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a6bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a6bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a6bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a6bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a6bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a6bA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a6bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a6bH" x="30" y="26">THE LENS AS A CHECKLIST: SIX PILLARS, EACH TIED TO A BOX ON THE PLATFORM</text>
+
+        <g filter="url(#a6bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="42" width="129" height="88" rx="6" transform="rotate(-0.6 94 86)" fill="#FFFFFF"/>
+          <rect x="167" y="42" width="129" height="88" rx="6" transform="rotate(0.6 231 86)" fill="#FFFFFF"/>
+          <rect x="304" y="42" width="129" height="88" rx="6" transform="rotate(-0.5 368 86)" fill="#FFFFFF"/>
+          <rect x="441" y="42" width="129" height="88" rx="6" transform="rotate(0.5 505 86)" fill="#FFFFFF"/>
+          <rect x="578" y="42" width="129" height="88" rx="6" transform="rotate(-0.6 642 86)" fill="#FFFFFF"/>
+          <rect x="715" y="42" width="129" height="88" rx="6" transform="rotate(0.6 779 86)" fill="#FFFFFF"/>
+          <rect x="40" y="52" width="14" height="14" rx="2" transform="rotate(-3 47 59)" fill="#EEF1FA"/>
+          <rect x="177" y="52" width="14" height="14" rx="2" transform="rotate(3 184 59)" fill="#EEF1FA"/>
+          <rect x="314" y="52" width="14" height="14" rx="2" transform="rotate(-2 321 59)" fill="#EEF1FA"/>
+          <rect x="451" y="52" width="14" height="14" rx="2" transform="rotate(2 458 59)" fill="#EEF1FA"/>
+          <rect x="588" y="52" width="14" height="14" rx="2" transform="rotate(-3 595 59)" fill="#EEF1FA"/>
+          <rect x="725" y="52" width="14" height="14" rx="2" transform="rotate(3 732 59)" fill="#EEF1FA"/>
+          <rect x="30" y="163" width="64" height="22" rx="4" transform="rotate(-1 62 174)" fill="#EEF1FA"/>
+          <rect x="30" y="191" width="64" height="22" rx="4" transform="rotate(1 62 202)" fill="#EEF1FA"/>
+          <rect x="30" y="219" width="64" height="22" rx="4" transform="rotate(-1 62 230)" fill="#EEF1FA"/>
+          <rect x="30" y="247" width="64" height="22" rx="4" transform="rotate(1 62 258)" fill="#EEF1FA"/>
+          <rect x="30" y="275" width="64" height="22" rx="4" transform="rotate(-1 62 286)" fill="#EEF1FA"/>
+          <path d="M30 150 L850 150" stroke="#E3E7EE"/>
+          <rect x="30" y="308" width="440" height="28" rx="6" transform="rotate(0.5 250 322)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a6bL" x="40" y="88">Operational</text>
+        <text class="a6bL" x="40" y="104">excellence</text>
+        <text class="a6bA" x="40" y="122">Lambda ingest</text>
+        <text class="a6bL" x="177" y="88">Security</text>
+        <text class="a6bA" x="177" y="122">IAM roles</text>
+        <text class="a6bL" x="314" y="88">Reliability</text>
+        <text class="a6bA" x="314" y="122">storage class</text>
+        <text class="a6bL" x="451" y="88">Performance</text>
+        <text class="a6bL" x="451" y="104">efficiency</text>
+        <text class="a6bA" x="451" y="122">curated/ layout</text>
+        <text class="a6bL" x="588" y="88">Cost</text>
+        <text class="a6bL" x="588" y="104">optimization</text>
+        <text class="a6bA" x="588" y="122">Budgets + tags</text>
+        <text class="a6bL" x="725" y="88">Sustainability</text>
+        <text class="a6bA" x="725" y="122">lifecycle rules</text>
+
+        <text class="a6bA" x="110" y="144">LENS BEST PRACTICE, QUOTED</text>
+        <text class="a6bA" x="680" y="144">BOX ON THE PLATFORM</text>
+
+        <text class="a6bL" x="40" y="178">BP 11.1</text>
+        <text class="a6bS" x="110" y="178">"manage the cost of storage and compute separately"</text>
+        <text class="a6bL" x="680" y="178">S3 apart from engines</text>
+        <text class="a6bL" x="40" y="206">BP 10.4</text>
+        <text class="a6bS" x="110" y="206">partitioning: "a full table scan is avoided"</text>
+        <text class="a6bL" x="680" y="206">curated/ partitions</text>
+        <text class="a6bL" x="40" y="234">BP 7.1</text>
+        <text class="a6bS" x="110" y="234">a central catalog is "an integral part of data governance"</text>
+        <text class="a6bL" x="680" y="234">Glue Data Catalog</text>
+        <text class="a6bL" x="40" y="262">BP 5.2</text>
+        <text class="a6bS" x="110" y="262">least privilege: "giving only enough access for systems to do the job"</text>
+        <text class="a6bL" x="680" y="262">IAM roles</text>
+        <text class="a6bL" x="40" y="290">BP 13.1</text>
+        <text class="a6bS" x="110" y="290">"use Amazon S3 Lifecycle configurations to expire data automatically"</text>
+        <text class="a6bL" x="680" y="290">raw/ and archive/</text>
+
+        <text class="a6bB" x="44" y="327">Last major update 22 Dec 2023 · first published 20 May 2020</text>
+        <text class="a6bS" x="490" y="327">almost three years old on 3 October 2026</text>
+
+        <text class="a6bN" x="30" y="358">Pillar-to-box pairings are our reading; BP numbers and quotes are the Lens's own.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange tab is the date to read before anything else; every pillar should land on a box you can point at</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Six pillars, one date<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The six pillars are operational excellence, security, reliability, performance efficiency, cost optimization and sustainability. They are the right six questions to ask of any architecture, and they do not go out of date. What does go out of date is the detail underneath them. The Lens's revision history shows a major update on December 22, 2023 and its first publication on May 20, 2020, and nothing since. So read it the way you would read a well-regarded textbook from three years ago: trust the reasoning, check every product name and limit against the service's current page.</p>
+        <p>The useful habit is the one in the figure: for each pillar, point at the box on your one-page platform where it bites first. If a pillar has nowhere to land, either the drawing is missing a box or the proposal has not thought about that pillar at all. The pairings above are our reading, not the Lens's; your platform may pair them differently, and that is fine as long as each one lands somewhere.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Five best practices, five boxes<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Five of the Lens's best practices map straight onto the drawing, and each repeats a lesson from the leader track. <strong>BP 11.1</strong>: "Decoupling storage from compute allows you to manage the cost of storage and compute separately", which is why the lake and the engines are separate boxes with separate meters. <strong>BP 10.4</strong>, partition your data: "a full table scan is avoided, meaning faster performance and lower query cost", the $15,000 to $88 drop from session 5. <strong>BP 7.1</strong>: a central catalog is "an integral part of data governance". <strong>BP 5.2</strong>: least privilege works "by giving only enough access for systems to do the job". <strong>BP 13.1</strong>: "use Amazon S3 Lifecycle configurations to expire data automatically".</p>
+        <p>One more line is worth carrying into a cost review: "Using Parquet over CSV format can reduce storage costs significantly" (BP 13.1.6). The measured sample agrees: the same 100,000 trips took 23.6% of the CSV's bytes as a single Parquet file. Least privilege as a principle, and how to run access reviews around it, is taught in <a href="https://phoebefu6.github.io/learn-data-access-control-with-phoebe/">learn data access control</a>; these pages stay with how AWS enforces it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What a three-year-old lens cannot tell you<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Several things a data leader relies on have moved on AWS's own pages, and a 2023 document cannot reflect the ones that changed after it. Since September 2024, lifecycle rules by default do not transition objects under 128 KB. Bedrock's original Agents feature is now called "Agents Classic" and "is no longer open to new customers", with AgentCore as its successor. Lambda's asynchronous payload limit is now 1 MB, not the older 256 KB. These pages do not date every one of those changes, and that is the point: the Lens tells you what to care about, and only the current service page tells you the current number.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Green on every pillar.</strong> An architecture review scores a proposal against the six pillars and marks all six green. Security is green because "we use IAM roles". Nobody asked how many actions the analyst role could take, and a single wildcard Allow had lifted it from 7 of 24 data-team actions to 22 of 24, the count analyst session 8 measured. The pillar was named and never tied to a box. The fix was the habit in the figure: every green needs a box and a number beside it. Constructed; the 7 and 22 of 24 are the measured canon from analyst session 8.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers six questions to ask any AWS data proposal</span>
+      <h2>Six questions that only take a number for an answer</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A proposal is ready to sign when it answers six questions with a name or a number, not with "it depends" or "we'll optimise later". Each question comes from one session of the leader track, and each has a figure on these pages you can hold the answer against. Ask them in order: the earlier answers change the later ones, because the Region sets the prices and the layout sets the bytes that every meter downstream bills on.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 368" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Six gates in order, each with what to hold the answer against and what counts as a pass. 1, which Region and why: 39 Regions and 124 Availability Zones, prices here are us-east-1 only; pass is one Region and one reason. 2, where do the bytes live: Parquet is 23.6 percent of the CSV bytes, a one-week question on partitioned data reads 0.58 percent; pass is zones, layout and bytes read. 3, who can touch what: a wildcard lifts the analyst role from 7 to 22 of 24 actions, explicit Denies still hold; pass is roles plus named Denies. 4, highlighted, the meter at our volume: Athena and Redshift Serverless cross over at about 31 or 123 queries a day, modelled; pass is a price at our query count. 5, what shows up later: 10 MB, 60 second and 30 day minimums, small files, transfer out and Budgets lag; pass is each quiet item named. 6, for AI, model and mode: on-demand 5.32 dollars, batch 2.66 dollars for a million notes, some models retain prompts up to 30 days; pass is model, mode and retention read.">
+        <defs>
+          <filter id="a6cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="181" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a6cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a6cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a6cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a6cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a6cB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a6cA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a6cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a6cH" x="30" y="26">SIX GATES BEFORE ANYONE SIGNS: EACH ONE WANTS A NUMBER OR A NAME</text>
+
+        <g filter="url(#a6cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="44" width="250" height="112" rx="8" transform="rotate(-0.5 155 100)" fill="#FFFFFF"/>
+          <rect x="315" y="44" width="250" height="112" rx="8" transform="rotate(0.5 440 100)" fill="#FFFFFF"/>
+          <rect x="600" y="44" width="250" height="112" rx="8" transform="rotate(-0.4 725 100)" fill="#FFFFFF"/>
+          <path d="M283 100 L311 100" marker-end="url(#a6cAr)"/>
+          <path d="M568 100 L596 100" marker-end="url(#a6cAr)"/>
+          <path d="M725 160 L725 180 L155 180 L155 199" marker-end="url(#a6cAr)"/>
+          <rect x="30" y="204" width="250" height="112" rx="8" transform="rotate(0.6 155 260)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="315" y="204" width="250" height="112" rx="8" transform="rotate(-0.5 440 260)" fill="#FFFFFF"/>
+          <rect x="600" y="204" width="250" height="112" rx="8" transform="rotate(0.4 725 260)" fill="#EEF1FA"/>
+          <path d="M283 260 L311 260" marker-end="url(#a6cAr)"/>
+          <path d="M568 260 L596 260" marker-end="url(#a6cAr)"/>
+        </g>
+
+        <text class="a6cH" x="44" y="68">1 · Which Region, and why?</text>
+        <text class="a6cS" x="44" y="90">39 Regions, 124 Availability Zones</text>
+        <text class="a6cS" x="44" y="106">prices here: us-east-1 only</text>
+        <text class="a6cA" x="44" y="136">pass: one Region, one reason</text>
+
+        <text class="a6cH" x="329" y="68">2 · Where do the bytes live?</text>
+        <text class="a6cS" x="329" y="90">Parquet: 23.6% of the CSV bytes</text>
+        <text class="a6cS" x="329" y="106">one-week ask, partitioned: 0.58%</text>
+        <text class="a6cA" x="329" y="136">pass: zones, layout, bytes read</text>
+
+        <text class="a6cH" x="614" y="68">3 · Who can touch what?</text>
+        <text class="a6cS" x="614" y="90">a wildcard: 7 to 22 of 24 allowed</text>
+        <text class="a6cS" x="614" y="106">explicit Denies still hold</text>
+        <text class="a6cA" x="614" y="136">pass: roles + the named Denies</text>
+
+        <text class="a6cH" x="44" y="228">4 · The meter at our volume?</text>
+        <text class="a6cB" x="44" y="250">Athena vs Redshift crossover:</text>
+        <text class="a6cB" x="44" y="266">about 31 or 123 queries a day</text>
+        <text class="a6cB" x="44" y="296">pass: a price at our query count</text>
+
+        <text class="a6cH" x="329" y="228">5 · What shows up later?</text>
+        <text class="a6cS" x="329" y="250">10 MB, 60 s and 30-day minimums</text>
+        <text class="a6cS" x="329" y="266">small files, transfer, Budgets lag</text>
+        <text class="a6cA" x="329" y="296">pass: each quiet item named</text>
+
+        <text class="a6cH" x="614" y="228">6 · For AI: model and mode?</text>
+        <text class="a6cS" x="614" y="250">on-demand $5.32, batch $2.66</text>
+        <text class="a6cS" x="614" y="266">some models retain up to 30 days</text>
+        <text class="a6cA" x="614" y="296">pass: model, mode, retention</text>
+
+        <text class="a6cN" x="30" y="352">Volumes and crossovers modelled; prices us-east-1, AWS Price List, 3 Oct 2026; re-verify.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange gate is the one a storage-only quote never reaches; each gate passes only on a number or a name</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Questions 1 to 3: where, what layout, who<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>1 · Which Region, and why?</strong> AWS runs 39 Regions with 124 Availability Zones, and "An AWS Region is a physical location in the world where we have multiple Availability Zones." Prices differ by Region, and every price on these pages is us-east-1 only. Some limits differ too: Redshift Serverless allows a base capacity up to 1,024 RPUs in only five Regions, us-east-1 among them, and 512 elsewhere. Which Bedrock models are offered also varies, so check the model you need is available where your data lives. A pass is one named Region and a reason: where the users are, where the data must stay, or which service is offered there.</p>
+        <p><strong>2 · Where do the bytes live, and in what layout?</strong> Ask for the zones and the format of the zone the engines read. Then ask what share of the raw bytes a typical question reads, because that share is the bill. On the measured sample a single Parquet file was 23.6% of the CSV's bytes, and the one-week question read 0.58% of them once the Parquet was partitioned by day (analyst session 4). A pass names the zones, the layout and the bytes the busiest question reads.</p>
+        <p><strong>3 · Who can touch what, and which explicit Denies are the floor?</strong> Ask for the roles, how many actions each can take, and which Denies no Allow can override. The measured warning from analyst session 8: one <code>"Action": "*", "Resource": "*"</code> Allow lifted the analyst role from 7 of 24 data-team actions to 22 of 24, while the two explicit Denies, DeleteBucket and PutBucketPolicy, still held. A pass lists the roles and names the Denies.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Questions 4 and 5: the meter and the bill later<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>4 · Which meter does each engine run on, and what does it cost at our query volume?</strong> This is the question a storage-only quote never reaches. Analyst session 6 modelled one 20 GB question on Athena against an 8 RPU Redshift Serverless warehouse: at 10 a day Athena costs $34.87 a month, at 100 a day $298.54; the warehouse costs $95.81 busy one hour a day and $365.81 busy four. The crossovers fall at about <strong>31 and 123 queries a day</strong>, depending on how many hours the warehouse is busy (modelled volumes; us-east-1, AWS Price List, 3 October 2026; re-verify). A pass is a monthly price at your query count, not a price per unit.</p>
+        <p><strong>5 · What will we not see on the bill until later?</strong> Ask the proposal to name session 5's quiet line items: the Athena 10 MB minimum per query, the Redshift Serverless 60-second minimum and open connection pools, the Standard-IA 30-day and 128 KB minimums, many small files, transfer out past the free 100 GB a month, and the lag in Budgets data, "updated up to three times a day". A pass names each one and who watches it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Question 6: the AI box<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>6 · For AI work: which model, batch or on-demand, and what happens to our data?</strong> Bedrock offers batch inference "at a 50% lower price compared to on-demand", for prompts that can be answered asynchronously. Analyst session 7 modelled one million support notes at 120 input and 8 output tokens each on Nova Micro: <strong>$5.32 on-demand, $2.66 as a batch</strong> (modelled volumes; us-east-1, AWS Price List, 3 October 2026; re-verify). A summary nobody reads until morning does not need on-demand prices.</p>
+        <p>Then the data question, and teach both halves of AWS's answer. Model providers "don't have access to Amazon Bedrock logs or to customer prompts and completions", and "your content is not used to improve the base models and is not shared with any model providers". But for some models, prompts and completions "are retained within the AWS boundary for up to 30 days and may be reviewed by AWS" (Amazon Bedrock User Guide, "Data retention"). A pass names the model, the mode, and confirms someone has read the retention terms for that specific model. Least privilege for the AI box is <code>bedrock:InvokeModel</code> on one foundation-model ARN, not <code>bedrock:*</code>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The summariser that went back to legal.</strong> A team proposes summarising every support note overnight with a foundation model. The cost line is easy once someone asks question 6: as a batch job it is half the on-demand price, $2.66 against $5.32 per million notes on Nova Micro (modelled). The data line takes longer. The proposal said "Bedrock does not keep our data"; the chosen model was one AWS lists as retaining prompts and completions for up to 30 days. Nothing was wrong with the choice, but legal needed to know before, not after. Constructed; the prices are modelled from the Price List and the retention caveat is AWS's.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Your data platform on one page</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No console and no account. One page, landscape. Start from the map you drew in session 1, then give every box the two facts it is missing, its meter and its owner, and finish with the two rows that make the page useful in a review: security and cost. The worked example is constructed on the taxi-data platform from these pages; your boxes, owners and numbers will differ.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 362" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A hand-drawn one-page platform sheet with four columns: box, what it does, meter, owner. Six rows: S3 zones, raw curated results archive, 0.023 dollars per GB-month, owner data engineering lead; Glue Data Catalog, schema location partitions, 1 dollar per 100,000 objects a month, owner data engineering lead; Athena, ad hoc questions, 5 dollars per TB with a 10 MB minimum, owner analytics lead; Redshift Serverless, dashboards, 0.375 dollars per RPU-hour with a 60 second minimum, owner blank; Lambda ingest, lands files and writes Parquet, 0.20 dollars per million requests plus GB-seconds, owner blank; Bedrock, summaries of support notes, Nova Micro 0.000035 dollars per thousand input tokens, owner blank. Below, a security row: analyst role 7 of 24 actions, one wildcard Allow makes it 22, the 2 Denies hold. And an orange cost row: one-week dashboard at 100 a day, 88 dollars a month partitioned, 15,000 dollars on raw CSV, modelled.">
+        <defs>
+          <filter id="a6dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="191" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a6dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a6dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a6dH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a6dL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a6dS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a6dB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a6dN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#a6dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="20" width="820" height="214" rx="8" transform="rotate(-0.2 440 127)" fill="#FFFFFF"/>
+          <path d="M30 54 L850 54"/>
+          <path d="M200 20 L200 234 M440 20 L440 234 M690 20 L690 234" stroke="#C5CCD8"/>
+          <path d="M40 84 L840 84 M40 112 L840 112 M40 140 L840 140 M40 168 L840 168 M40 196 L840 196" stroke="#E3E7EE"/>
+          <rect x="30" y="248" width="820" height="32" rx="6" transform="rotate(0.3 440 264)" fill="#EEF1FA"/>
+          <rect x="30" y="292" width="820" height="32" rx="6" transform="rotate(-0.3 440 308)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a6dH" x="44" y="43">BOX</text>
+        <text class="a6dH" x="214" y="43">WHAT IT DOES</text>
+        <text class="a6dH" x="454" y="43">METER</text>
+        <text class="a6dH" x="704" y="43">OWNER</text>
+
+        <text class="a6dL" x="44" y="75">S3 zones</text>
+        <text class="a6dS" x="214" y="75">raw, curated, results, archive</text>
+        <text class="a6dS" x="454" y="75">$0.023 per GB-month, Standard</text>
+        <text class="a6dS" x="704" y="75">data eng lead</text>
+
+        <text class="a6dL" x="44" y="103">Glue Data Catalog</text>
+        <text class="a6dS" x="214" y="103">schema, location, partitions</text>
+        <text class="a6dS" x="454" y="103">$1 per 100,000 objects a month</text>
+        <text class="a6dS" x="704" y="103">data eng lead</text>
+
+        <text class="a6dL" x="44" y="131">Athena</text>
+        <text class="a6dS" x="214" y="131">ad hoc questions</text>
+        <text class="a6dS" x="454" y="131">$5.00 per TB, 10 MB minimum</text>
+        <text class="a6dS" x="704" y="131">analytics lead</text>
+
+        <text class="a6dL" x="44" y="159">Redshift Serverless</text>
+        <text class="a6dS" x="214" y="159">the dashboards, busy hours</text>
+        <text class="a6dS" x="454" y="159">$0.375 per RPU-hour, 60 s min</text>
+        <text class="a6dS" x="704" y="159">________</text>
+
+        <text class="a6dL" x="44" y="187">Lambda ingest</text>
+        <text class="a6dS" x="214" y="187">lands files, writes Parquet</text>
+        <text class="a6dS" x="454" y="187">$0.20 per 1M requests + GB-s</text>
+        <text class="a6dS" x="704" y="187">________</text>
+
+        <text class="a6dL" x="44" y="215">Bedrock</text>
+        <text class="a6dS" x="214" y="215">summaries of support notes</text>
+        <text class="a6dS" x="454" y="215">Nova Micro $0.000035 per 1K in</text>
+        <text class="a6dS" x="704" y="215">________</text>
+
+        <text class="a6dL" x="44" y="269">Security row</text>
+        <text class="a6dS" x="150" y="269">analyst role: 7 of 24 actions; one wildcard Allow makes it 22; the 2 Denies hold</text>
+        <text class="a6dL" x="44" y="313">Cost row</text>
+        <text class="a6dB" x="150" y="313">one-week dashboard, 100 a day: $88 a month partitioned, $15,000 on raw CSV (modelled)</text>
+
+        <text class="a6dN" x="30" y="348">Constructed example; meters us-east-1, AWS Price List, 3 Oct 2026, re-verify. Your numbers will differ.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three owner slots are still blank, and that is the first finding; the orange cost row is the line a review reads first</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Step 1: draw the boxes from session 1.</strong> Take the map where you placed your team's current tools onto AWS boxes. Keep only the boxes your platform actually runs or will run this year: storage zones, catalog, each engine, ingest, and the AI box if there is one. Draw the arrows the data takes. If a box has no arrow in or out, ask why it is on the page.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the boxes (constructed)</span>Sources      -&gt; Lambda ingest -&gt; S3 raw/
+S3 raw/      -&gt; curated/ (Parquet, partitioned by pickup day)
+curated/     -&gt; Athena (ad hoc), Redshift Serverless (dashboards),
+                Bedrock (support-note summaries)
+Glue Data Catalog indexes curated/; Athena writes to results/
+Lifecycle:   raw/ expires after 90 days; old curated/ to archive/</div>
+      </div>
+      <div class="step">
+        <p><strong>Step 2: put a meter on every box.</strong> Use session 4's four meters: time, bytes, requests, storage. Write the unit and the list price beside each box, with the Region and the date you read it. A box you cannot put a meter on is either free, which you should confirm, or not understood yet.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the meters (constructed)</span>S3 zones           storage   $0.023 per GB-month, Standard
+Glue Data Catalog  storage   $1 per 100,000 objects a month
+Athena             bytes     $5.00 per TB scanned, 10 MB minimum
+Redshift Serverl.  time      $0.375 per RPU-hour, 60 s minimum
+Lambda ingest      requests  $0.20 per 1M + GB-seconds
+Bedrock            tokens    Nova Micro $0.000035 per 1K input
+All: us-east-1, AWS Price List, 3 October 2026; re-verify</div>
+      </div>
+      <div class="step">
+        <p><strong>Step 3: put an owner on every box.</strong> One named person or role per box: the one who is asked when its meter jumps. "The platform team" is not an owner. Leave a slot blank rather than invent a name; a blank owner is the most useful finding the page can produce.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the owners (constructed)</span>S3 zones, Glue catalog   data engineering lead
+Athena                   analytics lead
+Redshift Serverless      ________   (nobody owns the overnight hours)
+Lambda ingest            ________
+Bedrock                  ________   (who read the retention terms?)</div>
+      </div>
+      <div class="step">
+        <p><strong>Step 4: add the security row from analyst session 8.</strong> Under the boxes, write each role and how many of your team's common actions it can take, then the explicit Denies that are the floor. Check for any <code>"Action": "*"</code> Allow: on the bench a single wildcard took the analyst role from 7 of 24 actions to 22 of 24. Copy your access matrix from session 3 if you have it.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the security row (constructed)</span>Analyst role:   7 of 24 data-team actions allowed
+Wildcard check: none found (with one, the bench measured 22 of 24)
+Floor:          explicit Deny on s3:DeleteBucket, s3:PutBucketPolicy
+AI box:         bedrock:InvokeModel on one foundation-model ARN only
+Owner:          platform lead; reviewed quarterly</div>
+      </div>
+      <div class="step">
+        <p><strong>Step 5: add the cost row from session 5.</strong> Take your busiest question or dashboard, its runs a day and the bytes one run reads in the layout it actually uses, and write the monthly price. Put your five-line guardrail plan beside it: the budget, the tags, the layout rule, the lifecycle rule and the idle check, each already with an owner.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example: the cost row (constructed)</span>Busiest:   one-week pickups dashboard, 100 runs a day
+Layout:    curated/ Parquet partitioned by day
+Monthly:   $88 (the same on raw CSV: $15,000) - modelled
+Storage:   $23.55 a month for a terabyte in Standard
+Guardrail: budget with 80% forecast alert, tags team/dataset/env active
+All: us-east-1, AWS Price List, 3 October 2026; re-verify</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The one-page platform that is really a logo wall</span>boxes:     every service the vendor sells, no arrows
+meters:    "pay as you go"
+owners:    "the platform team"
+security:  "IAM is configured"
+cost:      "$23.55 a month for storage"</div>
+
+    <div class="callout tip">
+      <p><strong>Read the page in a review, not just draw it.</strong> Before the next platform decision, put the one-page drawing on the table and walk the six questions from Part 3 against it. Every question should land on a box or a row with a number beside it. The questions that land on blank space are the agenda for the meeting. Keep the page next to the Lens: the Lens tells you which pillars to check, the page tells you which box to point at.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>After the leader track</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Fill the blank owners.</strong> For every box on your page with no owner, find the person who would be asked if its meter doubled next month, and ask whether they agree to be named. Write the date they agreed.</li>
+      <li><strong>Run the six questions on a real proposal.</strong> Take the last AWS proposal or estimate your team received and write one line per question: the answer it gave, or "not answered". Count the gaps.</li>
+      <li><strong>Read the Lens with a date in mind.</strong> Open the Well-Architected Data Analytics Lens, find one best practice that names a product or a limit, and check it against that service's current page. Note whether it still holds.</li>
+      <li><strong>Price your AI box.</strong> If your team runs or plans AI work on Bedrock, write the model, whether the work could run as a batch, and whether anyone has read that model's data retention terms. If nobody has, that is the next action, with an owner.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 6 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · How should a data leader read the Well-Architected Data Analytics Lens in October 2026?</p>
+      <button class="qopt" type="button">A · As a current product catalog, updated every quarter</button>
+      <button class="qopt" type="button">B · As obsolete, because it was first published in 2020</button>
+      <button class="qopt" type="button">C · As sound principles last majorly updated on December 22, 2023: use its six pillars and best practices, and check every product detail against today's service pages</button>
+      <button class="qopt" type="button">D · As a legal requirement AWS enforces on every account</button>
+      <p class="qwhy">The Lens was first published May 20, 2020 and last majorly updated December 22, 2023, with no later revision listed. Its pillars and best practices, such as decoupling storage from compute (BP 11.1), still hold; product details such as limits have moved since.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · A proposal prices your platform at $23.55 a month: a terabyte in S3 Standard. Which question should you ask first?</p>
+      <button class="qopt" type="button">A · Which meter each engine runs on, and what it costs at our query volume, because scanning that terabyte as CSV 100 times a day is modelled at $15,000 a month</button>
+      <button class="qopt" type="button">B · Whether the bucket name follows our naming convention</button>
+      <button class="qopt" type="button">C · Whether S3 Standard has 11 nines of durability</button>
+      <button class="qopt" type="button">D · How many services AWS offers in total</button>
+      <p class="qwhy">Storage is the cheapest meter on the page. The same question costs $15,000 a month on raw CSV and $88 on partitioned Parquet (modelled from measured bytes; us-east-1, AWS Price List, 3 October 2026; re-verify). A storage-only quote has simply stopped before the meter that matters.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · A team says "Bedrock never keeps our prompts". What is the accurate answer?</p>
+      <button class="qopt" type="button">A · Correct for every model, with no exceptions</button>
+      <button class="qopt" type="button">B · Wrong: model providers can read all Bedrock prompts</button>
+      <button class="qopt" type="button">C · Wrong: Bedrock uses your prompts to train the base models</button>
+      <button class="qopt" type="button">D · Partly: providers do not see prompts and content is not used to improve base models, but for some models prompts and completions are retained within the AWS boundary for up to 30 days and may be reviewed by AWS</button>
+      <p class="qwhy">AWS states both halves: providers "don't have access to Amazon Bedrock logs or to customer prompts and completions", and for some models content is "retained within the AWS boundary for up to 30 days and may be reviewed by AWS" (Amazon Bedrock User Guide, "Data retention"). Read the terms for the specific model.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Well-Architected Data Analytics Lens: six pillars; December 22, 2023 major update, first May 20, 2020; BP 11.1, 10.4, 7.1, 5.2, 13.1 and 13.1.6 quotes</span><span class="note">AWS Well-Architected Data Analytics Lens (December 22, 2023) and its document revisions page, read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Glue Data Catalog as an index to location, schema and runtime metrics; catalog prices</span><span class="note">AWS Glue Developer Guide, "AWS Glue Data Catalog"; AWS Price List bulk API, us-east-1 AWSGlue offer, retrieved 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Meters on the drawing: S3 $0.023 per GB-month, Athena $5.00 per TB, Redshift Serverless $0.375 per RPU-hour, Lambda $0.20 per 1M requests, Nova Micro $0.000035 per 1K input tokens</span><span class="note">AWS Price List bulk API, us-east-1 offers for AmazonS3, AmazonAthena, AmazonRedshift, AWSLambda, AmazonBedrock, retrieved 2026-10-03; re-verify before relying on them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">39 Regions, 124 Availability Zones; Redshift Serverless 1,024 RPU base in five Regions</span><span class="note">AWS global infrastructure page; Amazon Redshift Management Guide, "Compute capacity for Amazon Redshift Serverless", read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">23.6% and 0.58% of the CSV bytes; $15,000 against $88; 7 to 22 of 24 actions with a wildcard</span><span class="note">Bytes measured on the 100,000-row NYC TLC sample in analyst session 4; IAM evaluator measured in analyst session 8; monthly scaling modelled</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Crossovers at about 31 and 123 queries a day; Lambda $0.01 and $14.41 against Fargate $36.04; Nova Micro $5.32 against $2.66</span><span class="note">Modelled in analyst sessions 5, 6 and 7 at Price List rates; volumes are assumptions</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Bedrock: 100+ models, batch 50% lower, providers without access to prompts, the up-to-30-days retention caveat, Agents Classic closed to new customers</span><span class="note">Amazon Bedrock User Guide, "What is Amazon Bedrock?", "Data protection", "Data retention", "Batch inference"; Bedrock pricing, read 2026-10-03</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Streaming, orchestration, warehouse modelling, access-control concepts, EMR, SageMaker, Lake Formation, VPC design</span><span class="note">Named and linked, not taught: owned by sibling courses or not covered on these pages</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The two proposals, green on every pillar, the summariser that went back to legal; the worked one-page platform</span><span class="note">Constructed composites of common patterns, not specific incidents</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 6 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>One page, two facts per box</b><span>Every box gets its meter and a named owner. A blank owner is the first finding.</span></div>
+      <div class="cheat-item"><b>Curated is the centre</b><span>Every engine reads it, so its layout sets most of the bill: $88 against $15,000 a month for one question (modelled).</span></div>
+      <div class="cheat-item"><b>The Lens has a date</b><span>Last major update December 22, 2023. Trust the six pillars; check product details on today's pages.</span></div>
+      <div class="cheat-item"><b>Six questions</b><span>Region; bytes and layout; who can touch what; meter at our volume; what shows up later; the AI box.</span></div>
+      <div class="cheat-item"><b>Count the wildcards</b><span>One <code>"Action": "*"</code> Allow: 7 to 22 of 24 actions. Explicit Denies are the floor.</span></div>
+      <div class="cheat-item"><b>AI: mode and retention</b><span>Batch is 50% lower than on-demand. Some models retain prompts up to 30 days: read the terms.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>That is the leader track. To see the numbers on this page produced rather than quoted, take the analyst track from <a href="b1-s3-layout-and-parquet.html">analyst session 1, S3 layout and Parquet</a>: eight sessions in Python, run locally with no account. Or go straight to <a href="b8-the-iam-and-cost-bench.html">analyst session 8, the IAM and cost bench</a>, where the wildcard count and the per-layout costs on your one-page platform are computed case by case.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 6 of 6 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="a5-the-bill-you-did-not-plan.html">← Prev: The bill you did not plan</a> &nbsp;·&nbsp; <a href="../index.html">Course home</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

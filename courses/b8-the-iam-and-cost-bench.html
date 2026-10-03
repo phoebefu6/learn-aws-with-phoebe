@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 8 of 8. An IAM policy evaluator that follows AWS's documented evaluation logic, checked against 36 cases from the docs, and a cost panel priced from the AWS Price List with bytes measured on real taxi data. A break button proves the tests catch broken logic.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="The IAM and cost bench - learn aws with phoebe">
+<meta property="og:description" content="Analyst session 8 of 8. One wildcard Allow takes an analyst from 7 to 22 of 24 actions. Let an Allow beat a Deny and 6 of 36 doc cases fail. A one-week question: $15,000 a month on CSV, $88 partitioned.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/b8-the-iam-and-cost-bench.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The IAM and cost bench - learn aws with phoebe">
+<meta name="twitter:description" content="Analyst session 8 of 8. A policy evaluator tested against the docs, and a cost panel on real bytes and real prices.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 8 · The IAM and cost bench - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Analyst session 8 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Analyst track · Session 8 of 8</div>
+    <h1>The IAM and cost <span class="accent">bench</span></h1>
+    <p class="sub">Two questions decide whether an AWS data platform is safe and affordable: will this request be allowed, and what will this query cost? Tonight both are computed in your browser instead of argued. The first half is a policy evaluator written to AWS's documented evaluation logic and checked against 36 cases taken from the documentation, with an anti-lever that shows what one wildcard does and break buttons that prove the tests can fail. The second half prices queries and storage from the AWS Price List, with bytes measured on the real taxi files from session 1.</p>
+    <div class="chip-row">
+      <span class="chip level">🔴 Bench night</span>
+      <span class="chip audience">Bring your session 2 policy and session 4 query</span>
+      <span class="chip audience">No code tonight, all clicking</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:3">3-14 · What the evaluator follows</span>
+      <span class="a3" style="flex:6">14-40 · Policies, then queries, on the bench</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">A bench is a fixed set of inputs and a fixed question, so that when two choices give two answers the only thing that differed was the choice. The IAM half has 36 requests, each with the verdict AWS's documentation says it must get. The cost half has four questions asked of the same 100,000 real taxi trips in three layouts. Every verdict is computed by the evaluator in this page, every byte count was measured from the real files, and every price is a row from the AWS Price List for us-east-1. The one thing that is modelled, scaling the sample up to your table size, is labelled on the widget.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">measured = counted from real files or computed by the evaluator</span>
+      <span class="pill">modelled = scaled from the sample to your size</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A policy evaluator you can trust because you watched it fail when broken, the count of what one <code>"Action": "*"</code> hands an analyst (7 of 24 data actions become 22), and a priced answer to "what does this query cost at our size, in each layout?", stamped with the date its prices were read.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the evaluation order the evaluator implements</span>
+      <h2>Six steps, in AWS's order</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">AWS's enforcement logic starts from no: "By default, all requests are implicitly denied", the account root user excepted. It then looks for any explicit Deny in every applicable policy, and "If the enforcement code finds even one explicit deny that applies", the answer is Deny. Only after that does it look for something that allows the request. The evaluator on this page follows those steps for one stated scope: an IAM user in a single account.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The evaluation order as a hand-drawn decision ladder. Step 1: any explicit Deny in an SCP, the bucket policy, an identity policy or the boundary means Deny, final. Step 2: an SCP is attached and nothing in it allows: implicit Deny. Step 3: the bucket policy allows this user's ARN directly: Allow, not limited by the identity policy or the boundary. Step 4: no identity policy allows: implicit Deny. Step 5: a boundary is set and does not allow: implicit Deny. Step 6: otherwise Allow. A side note lists what is out of scope: session policies, RCPs, roles and cross-account requests.">
+        <defs>
+          <filter id="b8aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="61" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="b8aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b8aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b8aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b8aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b8aW { font: 800 11px Inter, sans-serif; fill: #FFFFFF; }
+          .b8aR { font: 800 11px Inter, sans-serif; fill: #991B1B; }
+          .b8aB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b8aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b8aH" x="30" y="26">ONE REQUEST, SIX QUESTIONS, FIRST MATCH DECIDES</text>
+
+        <g filter="url(#b8aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="44" width="430" height="40" rx="8" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="40" y="100" width="430" height="40" rx="8" fill="#FFFFFF"/>
+          <rect x="40" y="156" width="430" height="40" rx="8" fill="#FFFFFF"/>
+          <rect x="40" y="212" width="430" height="40" rx="8" fill="#FFFFFF"/>
+          <rect x="40" y="268" width="430" height="40" rx="8" fill="#FFFFFF"/>
+          <rect x="40" y="324" width="430" height="40" rx="8" fill="#EEF1FA"/>
+          <path d="M255 86 L255 96 M255 142 L255 152 M255 198 L255 208 M255 254 L255 264 M255 310 L255 320" marker-end="url(#b8aAr)"/>
+          <path d="M474 64 L520 64 M474 120 L520 120 M474 176 L520 176 M474 232 L520 232 M474 288 L520 288 M474 344 L520 344" marker-end="url(#b8aAr)"/>
+          <rect x="530" y="48" width="130" height="32" rx="16" fill="#FEF2F2" stroke="#991B1B"/>
+          <rect x="530" y="104" width="130" height="32" rx="16" fill="#EEF1FA"/>
+          <rect x="530" y="160" width="130" height="32" rx="16" fill="#183177" stroke="#183177"/>
+          <rect x="530" y="216" width="130" height="32" rx="16" fill="#EEF1FA"/>
+          <rect x="530" y="272" width="130" height="32" rx="16" fill="#EEF1FA"/>
+          <rect x="530" y="328" width="130" height="32" rx="16" fill="#183177" stroke="#183177"/>
+          <rect x="690" y="100" width="170" height="150" rx="10" transform="rotate(0.8 775 175)" stroke="#C5CCD8" stroke-dasharray="5 4" fill="#FFFFFF"/>
+        </g>
+
+        <text class="b8aL" x="54" y="69">1 · any explicit Deny, in any policy?</text>
+        <text class="b8aL" x="54" y="125">2 · SCP attached and nothing in it allows?</text>
+        <text class="b8aL" x="54" y="181">3 · bucket policy allows this user's ARN?</text>
+        <text class="b8aL" x="54" y="237">4 · no identity statement allows?</text>
+        <text class="b8aL" x="54" y="293">5 · boundary set and does not allow?</text>
+        <text class="b8aL" x="54" y="349">6 · none of the above</text>
+        <text class="b8aR" x="546" y="69">Deny, explicit</text>
+        <text class="b8aS" x="546" y="125">Deny, implicit</text>
+        <text class="b8aW" x="546" y="181">Allow</text>
+        <text class="b8aS" x="546" y="237">Deny, implicit</text>
+        <text class="b8aS" x="546" y="293">Deny, implicit</text>
+        <text class="b8aW" x="546" y="349">Allow</text>
+        <text class="b8aH" x="704" y="124">NOT MODELLED</text>
+        <text class="b8aS" x="704" y="146">session policies</text>
+        <text class="b8aS" x="704" y="166">RCPs</text>
+        <text class="b8aS" x="704" y="186">role sessions</text>
+        <text class="b8aS" x="704" y="206">cross-account</text>
+        <text class="b8aB" x="704" y="230">refused, not guessed</text>
+
+        <text class="b8aN" x="30" y="390">Step 3 is the one people forget: in one account, a bucket policy naming the user grants access on its own.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange step is checked first and cannot be overridden: no Allow anywhere beats an explicit Deny</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What the evaluator does, and refuses to do<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>It reads identity policies, an optional bucket policy with a <code>Principal</code>, an optional permissions boundary and an optional SCP. It matches actions case-insensitively with <code>*</code> and <code>?</code>, because "The prefix and the action name are case insensitive", and resources case-sensitively, segment by segment. It implements <code>NotAction</code> and six condition operators: StringEquals, StringNotEquals, StringLike, IpAddress, NotIpAddress and Bool. A key missing from the request makes a condition false, and a negated one true, as the operator page states. Several operators are ANDed, several values for one key are ORed.</p>
+        <p>It does not implement session policies, resource control policies, role sessions, cross-account requests, policy variables or the ForAllValues and ForAnyValue set operators. Those are not small details, they change verdicts, so the evaluator throws an error on an operator it does not know rather than quietly guessing. The same logic is ported to Python, and on all 192 verdicts the bench computes (36 cases in four modes, plus 24 analyst actions twice) the browser and Python agree.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where the 36 expected verdicts come from<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Each case quotes the documentation sentence it tests. Some are straight from AWS's own tables: <code>bucket/*/test/*</code> must match <code>bucket/1/2/test/3/object.jpg</code> and must not match <code>bucket/1-test/object.jpg</code>; a <code>Bool</code> deny on <code>aws:SecureTransport = false</code> must match a plain-HTTP request and must not match when the key is absent. Others follow from the evaluation pages: a boundary is an intersection, an SCP must also allow, and a bucket policy that names an IAM user is "not limited by an implicit deny in an identity-based policy or permissions boundary". The table is in the widget; expand any row to read its rule.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="bench-iam">
+    <div class="section-kicker">
+      <span class="klabel">Build-along · the IAM half</span>
+      <h2>Ask as the analyst, then break the logic</h2>
+      <span class="tag demo">★ 12 min · the main event, part one</span>
+    </div>
+    <p class="lede">The analyst holds two policies: read the curated zone, run Athena, write query results; and guardrails that deny plain HTTP on the lake and deny deleting the bucket or changing its policy. The request starts on <code>s3:PutObject</code> into curated, which nothing allows. Read the trace, then switch on the anti-lever and read it again. Then run the two break buttons and watch the test table catch each one.</p>
+
+    <div id="aws-iam-bench"></div>
+
+    <div class="callout tip">
+      <p><strong>Read it in this order.</strong> The verdict, then which step decided it, then the count beside the anti-lever. Set "Over TLS" to plain HTTP on any S3 request to the lake and watch step 1 end the evaluation, wildcard or not.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the anti-lever and the break buttons</span>
+      <h2>One wildcard, and two ways to be wrong</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">The anti-lever is the most common shortcut in real accounts: an Allow for <code>"Action": "*"</code> on <code>"Resource": "*"</code>, added because something was denied and a deadline was close. The break buttons are the opposite test: they make the evaluator wrong on purpose, so you can see that the 36 cases measure the logic and do not merely agree with it.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Top: two bars for the analyst's 24 data-team actions. Without the wildcard 7 are allowed; with an Action star Allow, 22 are allowed, and only the 2 explicitly denied actions, DeleteBucket and PutBucketPolicy, stay denied. Second pair: across the 36 test requests, 16 allowed rises to 28. Bottom: the test table under three conditions. Correct logic passes 36 of 36. Letting an Allow beat a Deny fails 6 cases, every explicit-deny case that also has an Allow. Letting a missing condition key match fails 2 cases.">
+        <defs>
+          <filter id="b8bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b8bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+        </defs>
+        <style>
+          .b8bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b8bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b8bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b8bV { font: 800 13px Inter, sans-serif; fill: #0E1F52; }
+          .b8bR { font: 800 13px Inter, sans-serif; fill: #991B1B; }
+          .b8bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b8bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+          .b8bW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+        </style>
+
+        <text class="b8bH" x="30" y="26">WHAT THE WILDCARD HANDS OVER (bar = share allowed)</text>
+
+        <g filter="url(#b8bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="250" y="42" width="140" height="24" rx="3" fill="url(#b8bHc)"/>
+          <rect x="250" y="74" width="440" height="24" rx="3" fill="#FEF2F2" stroke="#991B1B"/>
+          <rect x="250" y="116" width="213" height="24" rx="3" fill="url(#b8bHc)"/>
+          <rect x="250" y="148" width="373" height="24" rx="3" fill="#FEF2F2" stroke="#991B1B"/>
+          <path d="M250 36 L250 178 M730 36 L730 178" stroke="#C5CCD8"/>
+          <rect x="40" y="218" width="250" height="56" rx="10" transform="rotate(-0.6 165 246)" fill="#183177" stroke="#183177"/>
+          <rect x="315" y="218" width="250" height="56" rx="10" transform="rotate(0.5 440 246)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="590" y="218" width="250" height="56" rx="10" transform="rotate(-0.4 715 246)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="b8bL" x="240" y="59" text-anchor="end">Analyst, 24 data actions</text>
+        <text class="b8bV" x="398" y="60">7</text>
+        <text class="b8bL" x="240" y="91" text-anchor="end">same, plus "Action": "*"</text>
+        <text class="b8bR" x="698" y="92">22</text>
+        <text class="b8bL" x="240" y="133" text-anchor="end">36 test requests</text>
+        <text class="b8bV" x="471" y="134">16</text>
+        <text class="b8bL" x="240" y="165" text-anchor="end">same, plus "Action": "*"</text>
+        <text class="b8bR" x="631" y="166">28</text>
+        <text class="b8bS" x="738" y="91">2 explicit Denies hold</text>
+
+        <text class="b8bH" x="30" y="206">THE SAME 36 DOC CASES, THREE EVALUATORS</text>
+        <text class="b8bW" x="56" y="242">Correct logic</text>
+        <text class="b8bW" x="56" y="262">36 of 36 pass</text>
+        <text class="b8bH" x="331" y="242">Allow beats Deny</text>
+        <text class="b8bH" x="331" y="262">30 pass, 6 FAIL</text>
+        <text class="b8bH" x="606" y="242">Missing key matches</text>
+        <text class="b8bH" x="606" y="262">34 pass, 2 FAIL</text>
+        <text class="b8bN" x="30" y="304">A test suite earns trust by failing when the logic is wrong. Both break buttons are caught.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the red bars are the anti-lever: 15 more data actions for the analyst, including IAM, EC2 and KMS</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The anti-lever, with its honest nuance<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>With <code>"Action": "*"</code> added, the denied request, <code>s3:PutObject</code> into curated, passes. So do 14 other actions the analyst never needed, among them deleting curated objects, deleting Glue tables, updating the ingest Lambda's code, creating IAM users and access keys, starting EC2 instances, decrypting with KMS, and reading another bucket. On the 36-case table, allowed requests rise from 16 to 28, and only 24 of 36 verdicts still match what the documentation says the original policies should produce.</p>
+        <p>The nuance matters: the wildcard does not beat the two explicit Denies. DeleteBucket and PutBucketPolicy stay denied, because step 1 runs before any Allow is read. That is the real lesson of the guardrails policy: explicit Denies are the floor a hurried wildcard cannot lower. It is also why least privilege is a practice and not a slogan; AWS's guidance is to "grant only the permissions required to perform a task", and IAM Access Analyzer can generate a policy from what a role actually used. The concepts behind that, roles, attributes and access reviews, are taught in <a href="https://phoebefu6.github.io/learn-data-access-control-with-phoebe/">data access control</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>What the break buttons prove<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Allow beats Deny</strong> fails exactly the 6 cases where an explicit Deny meets an Allow: the DeleteObject guard, the plain-HTTP guard, the bucket policy deny, the SCP deny, the boundary deny and the office-IP fence. <strong>A missing key matches</strong> fails 2: a tag-gated Allow that would let an untagged user in, and the HTTPS guard that would block a request carrying no transport key. If either button had left the score at 36, the cases would be decoration. They are not: each break is caught by the cases written for it, and by nothing else.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="bench-cost">
+    <div class="section-kicker">
+      <span class="klabel">Build-along · the cost half</span>
+      <h2>Price a query at your size</h2>
+      <span class="tag demo">★ 14 min · the main event, part two</span>
+    </div>
+    <p class="lede">Set your table size as if it were stored as CSV, how many times a day the question runs, and a storage class. Pick one of the four questions, or build your own from columns and days. The bench reads the measured bytes for each layout, scales them to your size, and prices them from the Price List rows shown in the stamp.</p>
+
+    <div id="aws-cost-bench"></div>
+
+    <div class="callout tip">
+      <p><strong>Read it in this order.</strong> The share of the CSV first, because it does not depend on prices, then the monthly cost, then storage. Try Q1, every column, and notice the partitioned layout is the more expensive Parquet: the small-files trade from session 1, priced.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers what the cost panel finds</span>
+      <h2>Same answers, very different bills</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">The four questions give identical answers in every layout; DuckDB returns the same rows from the CSV, the single Parquet file and the partitioned folders. What differs is the bytes read, and at 1,024 GB of CSV-equivalent data and 100 runs a day those bytes become the numbers below. An independent Python run reproduces every byte count and dollar figure exactly.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Monthly Athena cost at 1,024 GB of CSV and 100 queries a day, per layout, for three questions. Average tip by payment type: CSV 15,000 dollars, Parquet 293, partitioned 566. Fares on one day: CSV 15,000, Parquet 1,222, partitioned 13. Pickups per zone for one week: CSV 15,000, Parquet 1,130, partitioned 88. A note adds that storing the CSV for a month in S3 Standard costs 23.55 dollars. Bars use a log scale.">
+        <defs>
+          <filter id="b8cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b8cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+        </defs>
+        <style>
+          .b8cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b8cL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b8cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b8cV { font: 800 12px Inter, sans-serif; fill: #0E1F52; }
+          .b8cB { font: 800 12px Inter, sans-serif; fill: #5C3300; }
+          .b8cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b8cH" x="30" y="26">ATHENA, $ PER MONTH AT 1,024 GB OF CSV, 100 QUERIES A DAY (bar length: log scale)</text>
+
+        <g filter="url(#b8cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="250" y="46" width="500" height="18" rx="3" fill="url(#b8cHc)"/>
+          <rect x="250" y="68" width="296" height="18" rx="3" fill="#183177" stroke="#183177"/>
+          <rect x="250" y="90" width="330" height="18" rx="3" fill="#B9C4E6"/>
+          <rect x="250" y="134" width="500" height="18" rx="3" fill="url(#b8cHc)"/>
+          <rect x="250" y="156" width="371" height="18" rx="3" fill="#183177" stroke="#183177"/>
+          <rect x="250" y="178" width="134" height="18" rx="3" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="250" y="222" width="500" height="18" rx="3" fill="url(#b8cHc)"/>
+          <rect x="250" y="244" width="365" height="18" rx="3" fill="#183177" stroke="#183177"/>
+          <rect x="250" y="266" width="233" height="18" rx="3" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="b8cL" x="236" y="70" text-anchor="end">Avg tip by payment type</text>
+        <text class="b8cS" x="236" y="86" text-anchor="end">whole month, 2 columns</text>
+        <text class="b8cV" x="758" y="60">CSV $15,000</text>
+        <text class="b8cV" x="554" y="82">Parquet $293</text>
+        <text class="b8cV" x="588" y="104">partitioned $566</text>
+        <text class="b8cL" x="236" y="158" text-anchor="end">Fares on 15 January</text>
+        <text class="b8cS" x="236" y="174" text-anchor="end">one day, 1 column</text>
+        <text class="b8cV" x="758" y="148">CSV $15,000</text>
+        <text class="b8cV" x="629" y="170">Parquet $1,222</text>
+        <text class="b8cB" x="392" y="192">partitioned $13</text>
+        <text class="b8cL" x="236" y="246" text-anchor="end">Pickups per zone</text>
+        <text class="b8cS" x="236" y="262" text-anchor="end">one week, 1 column</text>
+        <text class="b8cV" x="758" y="236">CSV $15,000</text>
+        <text class="b8cV" x="623" y="258">Parquet $1,130</text>
+        <text class="b8cB" x="491" y="280">partitioned $88</text>
+
+        <text class="b8cN" x="30" y="314">For scale: storing that CSV for a month in S3 Standard is $23.55. Every bar above is the reading meter.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange bars are the partitions paying off; the light bar is them costing extra on a whole-month question</figcaption>
+    </figure>
+
+    <table class="clean">
+      <tr><th>Question</th><th>CSV</th><th>Parquet, one file</th><th>Parquet, partitioned by day</th></tr>
+      <tr><td>Q1 every column, whole month</td><td>100% · $5.00 a query · $15,000/mo</td><td>23.64% · $1.18 · $3,547</td><td>29.95% · $1.50 · $4,492</td></tr>
+      <tr><td>Q2 average tip by payment type</td><td>100% · $5.00 · $15,000</td><td><strong>1.96% · $0.10 · $293</strong></td><td>3.78% · $0.19 · $566</td></tr>
+      <tr><td>Q3 fares on 15 January</td><td>100% · $5.00 · $15,000</td><td>8.15% · $0.41 · $1,222</td><td><strong>0.09% · $0.00 · $13</strong></td></tr>
+      <tr><td>Q4 pickups per zone, 15 to 21 January</td><td>100% · $5.00 · $15,000</td><td>7.53% · $0.38 · $1,130</td><td><strong>0.58% · $0.03 · $88</strong></td></tr>
+      <tr><td>Storage a month, S3 Standard</td><td>1,024.0 GB · $23.55</td><td>242.1 GB · $5.57</td><td>306.7 GB · $7.05</td></tr>
+    </table>
+    <p class="mono" style="margin-top:6px">Share of the CSV is measured on the sample. Dollars are at 1,024 GB of CSV and 100 queries a day, us-east-1 Price List of 3 October 2026, scaled linearly (modelled). Re-verify before delivery.</p>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Finding 1: below 10 MB, every layout costs the same<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Athena bills "the number of bytes scanned per query, rounded up to the nearest megabyte, with a 10 MB minimum per query". The whole sample is under 10 MB as CSV, so on the real files every query in every layout bills the minimum, $0.000048. That is why layout mistakes survive proofs of concept: on a small table they are free. The difference appears only at scale, which is the job of the size box.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Finding 2: no layout wins every question<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The single Parquet file wins the two whole-month questions; the partitioned layout wins the two date-filtered ones by a factor of 13 to 92 over the single file. The right layout follows the questions people actually ask, which is why session 4 starts from the query log. The partitioned layout's whole-month penalty is partly a sample artefact: 31 files of about 100 kilobytes each carry proportionally heavy footers, and linear scaling carries that weight up to 1 TB, where real daily files would be far larger. Read Q1 and Q2 for partitioned as an upper bound.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the panel does not price<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>S3 GET request charges for the files Athena opens, Glue catalog requests, data transfer, query result storage, and the Intelligent-Tiering monitoring fee are not in the totals. At these sizes the scan dominates them, but a table with millions of tiny files can make request charges visible. Storage minimums matter too: Standard-IA and Glacier Instant Retrieval bill at least 128 KB per object and at least 30 or 90 days, so a class that looks cheaper in the panel can cost more for short-lived data.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before the platform page</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Write down your analyst's count.</strong> Take a real role from your account, list the 24 actions on the bench that matter to it, and count how many its policies allow. If the answer is above 15, look for a wildcard.</li>
+      <li><strong>Add one guardrail.</strong> Write an explicit Deny that would survive a future wildcard, as DeleteBucket does here, and say which step of the evaluation makes it hold.</li>
+      <li><strong>Price your heaviest dashboard.</strong> Put your real table size and refresh count in the cost panel, pick the closest question, and write the monthly figure for each layout.</li>
+      <li><strong>Take both numbers to leader session 6,</strong> the platform on one page, where they become the security and cost rows.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 8 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · The analyst's guardrail denies <code>s3:DeleteBucket</code>. Someone adds an Allow for <code>"Action": "*"</code> on <code>"Resource": "*"</code>. What happens to DeleteBucket?</p>
+      <button class="qopt" type="button">A · It becomes allowed, because the newer policy wins</button>
+      <button class="qopt" type="button">B · It stays denied: any applicable explicit Deny ends evaluation before any Allow is considered</button>
+      <button class="qopt" type="button">C · It depends on which policy is attached first</button>
+      <button class="qopt" type="button">D · It becomes allowed only for the root user</button>
+      <p class="qwhy">"An explicit deny overrides an explicit allow." The wildcard still hands over 15 other actions, which is why the guardrail is necessary but not enough.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Breaking the evaluator so that an Allow beats a Deny makes 6 of the 36 cases fail. Why is that a good result?</p>
+      <button class="qopt" type="button">A · Because 30 still pass, so the evaluator is mostly right</button>
+      <button class="qopt" type="button">B · It is not; the cases should all still pass</button>
+      <button class="qopt" type="button">C · Because 6 is the number of policies on the page</button>
+      <button class="qopt" type="button">D · It shows the cases measure the logic: a deliberately wrong evaluator is caught, by exactly the cases where an explicit Deny meets an Allow</button>
+      <p class="qwhy">A test suite that cannot fail measures nothing. Breaking the rule and watching the right cases fail is how you know the passing score means something.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · On the real 100,000-row sample, every query in every layout bills $0.000048. At 1,024 GB the one-week question costs $15,000 a month as CSV and $88 partitioned. What explains both?</p>
+      <button class="qopt" type="button">A · Athena's 10 MB minimum hides layout differences on small data; at scale the bill follows bytes scanned, and the partitioned layout reads 0.58 percent of the CSV for that question</button>
+      <button class="qopt" type="button">B · Athena charges a flat fee per query</button>
+      <button class="qopt" type="button">C · The sample is broken</button>
+      <button class="qopt" type="button">D · Partitioned data is billed at a discount rate</button>
+      <p class="qwhy">The minimum makes small tables look free, which is why layout mistakes survive proofs of concept. The scaling is modelled, the share is measured, and the price is $5.00 per TB from the Price List.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The evaluation order, unions, intersections and the bucket-policy exception</span><span class="note">AWS IAM User Guide, "Policy evaluation logic" and "How AWS enforcement code logic evaluates requests to allow or deny access", read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Action, Resource and NotAction matching; six condition operators; AND and OR</span><span class="note">IAM User Guide policy element pages, "Condition operators" and "Conditions with multiple context keys or values", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">36 cases, two break modes, the anti-lever counts</span><span class="note">Computed by the evaluator in this page; a Python port agrees on all 192 verdicts</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every byte count and the identical answers across layouts</span><span class="note">Measured with DuckDB 1.5.6 on the 100,000-row NYC TLC sample, January 2024</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Athena $5.00 per TB, 10 MB minimum; S3 storage prices by class</span><span class="note">AWS Price List bulk API, us-east-1, retrieved 3 October 2026; Athena pricing page for the minimum. Re-verify before delivery</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Costs at your table size</span><span class="note">Modelled: measured bytes scaled linearly; overstates small-file overhead for the partitioned layout at large sizes</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Session policies, RCPs, roles, cross-account</span><span class="note">Not modelled, and refused by the evaluator rather than guessed</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 8 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Deny first, always</b><span>Any applicable explicit Deny ends evaluation. No Allow can reach it.</span></div>
+      <div class="cheat-item"><b>Default is no</b><span>Nothing allowed means implicitly denied, root user excepted.</span></div>
+      <div class="cheat-item"><b>One wildcard</b><span>Analyst: 7 of 24 data actions become 22. Test table: 16 of 36 become 28.</span></div>
+      <div class="cheat-item"><b>Tests must fail</b><span>Allow beats Deny: 6 fail. Missing key matches: 2 fail.</span></div>
+      <div class="cheat-item"><b>10 MB minimum</b><span>Small tables hide layout mistakes. Price at your real size.</span></div>
+      <div class="cheat-item"><b>Layout follows questions</b><span>One-week question at 1 TB: CSV $15,000, partitioned $88 a month.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>That is the end of the analyst track. The natural next step is leader session 6, a data platform on one page, which takes the two numbers from your homework, the wildcard count and the priced dashboard, and makes them the security and cost rows of a platform a leader can sign.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 8 of 8 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b7-bedrock-for-ai-teams.html">← Prev: Bedrock for AI teams</a> &nbsp;·&nbsp; <a href="../index.html">Course home</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/aws-iam.js?v=1"></script>
+<script src="../assets/aws-iam-cases.js?v=1"></script>
+<script src="../assets/aws-cost.js?v=1"></script>
+<script src="../assets/aws-sample.js?v=1"></script>
+<script src="../assets/aws-bench.js?v=2"></script>
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+request accepted by the Converse schema; stubbed reply: lost_item (STUBBED, not a model output)
+schema check catches a malformed request: ParamValidationError
+1,000,000 notes on Nova Micro: on-demand $5.32, batch $2.66
+["bedrock:InvokeModel"] on arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0

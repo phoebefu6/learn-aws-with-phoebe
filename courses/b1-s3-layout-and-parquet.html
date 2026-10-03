@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 1 of 8. 100,000 real New York taxi trips written three ways, CSV, Parquet and Parquet partitioned by day, uploaded to a mocked S3 bucket on your laptop, and measured byte by byte.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="S3 layout and Parquet - learn aws with phoebe">
+<meta property="og:description" content="Analyst session 1 of 8. The same 100,000 trips: 10,095,345 bytes as CSV, 2,387,037 as Parquet. A two-column question needs 197,417 of them.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/b1-s3-layout-and-parquet.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="S3 layout and Parquet - learn aws with phoebe">
+<meta name="twitter:description" content="Analyst session 1 of 8. Keys, prefixes and three layouts of real taxi data, measured.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 1 · S3 layout and Parquet - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Analyst session 1 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Analyst track · Session 1 of 8</div>
+    <h1>S3 layout and <span class="accent">Parquet</span></h1>
+    <p class="sub">Before anyone writes a query, somebody decides how the files sit in S3: what the keys look like, which format the bytes are in, and whether the data is split by date. Those three decisions set the price of every query for years. Tonight we take 100,000 real New York taxi trips, write them three ways, upload them to an S3 bucket that runs on your laptop, and measure exactly how many bytes a question has to read in each.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Foundations</span>
+      <span class="chip audience">Data analysts and engineers</span>
+      <span class="chip audience">Python, runs locally, no AWS account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Keys, formats, partitions</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: three layouts, measured</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">The analyst track runs entirely on your laptop. AWS calls are made with boto3, the official Python SDK, against moto, an open-source library that mocks the AWS API in memory, so nothing is created in any real account and nothing is billed. Where AWS would run SQL (Athena), DuckDB reads the same Parquet files. The data is one real public dataset all the way through: yellow taxi trips from the New York City Taxi and Limousine Commission, January 2024, sampled to 100,000 rows with a fixed seed so every number on these pages is one you can reproduce. Each page also offers an optional path on a real AWS account, clearly marked.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = run the code yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A local S3 bucket with a raw and a curated zone, the same trips in three layouts, and three measured numbers you can defend: the CSV is 10,095,345 bytes, the Parquet file is 2,387,037, and a two-column question needs only 197,417 of them.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers buckets, keys and prefixes</span>
+      <h2>There are no folders, only keys</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">S3 stores objects in buckets. Each object has a key, a string such as <code>curated/nyc_taxi/pickup_date=2024-01-15/data_0.parquet</code>. The console draws folders, but the slashes are just characters in the key; a "folder" is a prefix that many keys share. That sounds like trivia until you learn that engines prune by prefix, that throughput is counted per prefix, and that lifecycle rules and IAM policies are written against prefixes too.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One bucket, acme-lake, drawn as a flat list of keys rather than a tree. Keys starting raw/ hold the CSV as it arrived, one object of 10,095,345 bytes. Keys starting curated/nyc_taxi_flat/ hold one Parquet object of 2,387,037 bytes. Keys starting curated/nyc_taxi/ hold 31 objects, one per pickup day, 3,023,334 bytes in total, and one key is highlighted: pickup_date=2024-01-15. Brackets show that a prefix is what an IAM policy, a lifecycle rule and a query engine each point at.">
+        <defs>
+          <filter id="b1aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="13" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b1aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b1aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b1aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b1aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b1aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b1aB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b1aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #0E1F52; }
+          .b1aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b1aH" x="30" y="26">BUCKET acme-lake, AS S3 SEES IT: A FLAT LIST OF KEYS</text>
+
+        <g filter="url(#b1aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="560" height="240" rx="10" transform="rotate(-0.3 310 160)" fill="#FFFFFF"/>
+          <rect x="44" y="56" width="530" height="30" rx="5" fill="url(#b1aHc)"/>
+          <rect x="44" y="100" width="530" height="30" rx="5" fill="#EEF1FA"/>
+          <rect x="44" y="144" width="530" height="26" rx="5" fill="#EEF1FA"/>
+          <rect x="44" y="176" width="530" height="26" rx="5" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="44" y="208" width="530" height="26" rx="5" fill="#EEF1FA"/>
+          <path d="M604 72 L640 72 M604 116 L640 116 M604 190 L640 190"/>
+          <path d="M600 144 L612 144 L612 236 L600 236"/>
+          <rect x="652" y="92" width="200" height="120" rx="10" transform="rotate(0.6 752 152)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="b1aC" x="56" y="76">raw/nyc_taxi/2024/01/trips.csv</text>
+        <text class="b1aS" x="448" y="76">10,095,345 B</text>
+        <text class="b1aC" x="56" y="120">curated/nyc_taxi_flat/2024-01.parquet</text>
+        <text class="b1aS" x="456" y="120">2,387,037 B</text>
+        <text class="b1aC" x="56" y="162">curated/nyc_taxi/pickup_date=2024-01-14/...</text>
+        <text class="b1aC" x="56" y="194">curated/nyc_taxi/pickup_date=2024-01-15/...</text>
+        <text class="b1aC" x="56" y="226">curated/nyc_taxi/pickup_date=2024-01-16/...</text>
+        <text class="b1aS" x="56" y="262">31 day objects, 3,023,334 B in total</text>
+
+        <text class="b1aH" x="668" y="116">A PREFIX IS WHAT</text>
+        <text class="b1aS" x="668" y="140">an IAM policy grants</text>
+        <text class="b1aS" x="668" y="160">a lifecycle rule moves</text>
+        <text class="b1aS" x="668" y="180">an engine prunes</text>
+        <text class="b1aB" x="668" y="200">and S3 scales per</text>
+
+        <text class="b1aN" x="30" y="312">The "folders" in the console are drawn from the slashes. Name the keys for the questions you will ask.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange key is one day of trips; a question about 15 January only needs that prefix</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Raw, curated, and why two zones<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A common lake layout keeps a <strong>raw</strong> zone, data exactly as it arrived, and a <strong>curated</strong> zone, the same data cleaned and stored in a format built for reading. Raw is the receipt: if a transformation turns out to be wrong you can rebuild curated from it. Curated is what analysts and engines read. Because both are prefixes in a bucket, different IAM rules and different lifecycle rules can point at each: analysts read curated only, raw moves to a colder storage class after a while. Session 2 writes that IAM rule as code.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Throughput is counted per prefix<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>AWS's performance guidance says an application "can achieve at least 3,500 PUT/COPY/POST/DELETE or 5,500 GET/HEAD requests per second per partitioned Amazon S3 prefix", and that there is no limit to the number of prefixes in a bucket. Spreading hot data across prefixes raises the ceiling; while S3 scales to a new rate you may see 503 "Slow Down" responses. S3 gives "strong read-after-write consistency for PUT and DELETE requests of objects", so a file you just wrote is the file the next read sees.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers row and columnar formats</span>
+      <h2>CSV is read whole, Parquet is read by column</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">A CSV file stores one row after another. To answer "average tip by payment type", an engine must read every byte of every row, because the two columns it needs are scattered through all of them. Parquet stores each column in its own compressed chunks and keeps a footer that says where each chunk starts. An engine reads the footer, then only the chunks it needs. Athena's documentation names both moves: "Only the columns needed for the query are loaded", and you "pay for the number of bytes scanned before decompression".</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Left: the CSV file drawn as a tall stack of rows, all hachured because all 10,095,345 bytes must be read to answer a question about two columns. Right: the Parquet file drawn as 19 vertical column chunks of different widths plus a footer. Only two chunks are filled, payment_type and tip_amount, together 172,585 bytes, plus the footer and file overhead of 24,832 bytes, for 197,417 bytes read. A note gives the ratio: 1.96 percent of the CSV.">
+        <defs>
+          <filter id="b1bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="29" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b1bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+        </defs>
+        <style>
+          .b1bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b1bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b1bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b1bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b1bV { font: 800 17px Inter, sans-serif; fill: #0E1F52; }
+          .b1bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b1bH" x="30" y="26">THE SAME 100,000 TRIPS, ASKED: AVERAGE TIP BY PAYMENT TYPE</text>
+
+        <g filter="url(#b1bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="48" width="300" height="200" rx="6" transform="rotate(-0.5 190 148)" fill="url(#b1bHc)"/>
+          <path d="M44 78 L336 78 M44 108 L336 108 M44 138 L336 138 M44 168 L336 168 M44 198 L336 198 M44 228 L336 228" stroke="#C5CCD8"/>
+          <rect x="420" y="48" width="420" height="160" rx="6" transform="rotate(0.4 630 128)" fill="#FFFFFF"/>
+          <path d="M452 52 L452 204 M470 52 L470 204 M500 52 L500 204 M524 52 L524 204 M560 52 L560 204 M586 52 L586 204 M604 52 L604 204 M648 52 L648 204 M680 52 L680 204 M700 52 L700 204 M736 52 L736 204 M760 52 L760 204 M780 52 L780 204 M800 52 L800 204" stroke="#C5CCD8"/>
+          <rect x="606" y="54" width="40" height="150" rx="3" fill="#183177" stroke="#183177"/>
+          <rect x="682" y="54" width="16" height="150" rx="3" fill="#183177" stroke="#183177"/>
+          <rect x="420" y="214" width="420" height="30" rx="6" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="b1bL" x="40" y="272">CSV, one row after another</text>
+        <text class="b1bV" x="40" y="298">10,095,345 B read</text>
+        <text class="b1bS" x="40" y="316">every byte, for two columns</text>
+
+        <text class="b1bB" x="432" y="234">footer: where each chunk starts</text>
+        <text class="b1bL" x="420" y="272">Parquet, 19 column chunks</text>
+        <text class="b1bV" x="420" y="298">197,417 B read</text>
+        <text class="b1bS" x="420" y="316">tip_amount + payment_type 172,585 B, overhead 24,832 B: 1.96% of the CSV</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the two navy chunks are all a columnar engine reads for this question; widths are drawn, not to scale</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Three wins in one format<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Smaller.</strong> The whole Parquet file is 23.6 percent of the CSV, because each column is compressed with an encoding suited to its type. <strong>Column pruning.</strong> A question that names two columns reads two columns. <strong>Typed.</strong> A timestamp is stored as a timestamp, not as text an engine must parse on every read. Athena's pricing page puts the combined effect at "up to 90%" saved per query from compressing, partitioning and converting to columnar formats; on this sample the two-column question reads 1.96 percent of the CSV's bytes, a saving of 98 percent, because the question is narrow.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where the format internals live<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Row groups, dictionary encoding, page statistics and table formats such as Iceberg are taught properly in the AI infrastructure course's storage session, <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/courses/b2-storage-formats.html">"Cheap bytes, expensive reads"</a>. Here the format matters only as a bill: how many bytes a question forces an engine to read from S3.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers partitioning, and when it backfires</span>
+      <h2>Partitions skip folders; small files cost footers</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Partitioning writes the data into one prefix per value of a column, here one per pickup day: <code>pickup_date=2024-01-15/</code>. A query that filters on that column reads only the matching prefixes, and Athena's documentation says so plainly: "Athena scans the data only from that partition". The catch is the same mechanism in reverse. Every partition is its own file with its own footer, and a query that needs every day pays for every footer.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Thirty-one small boxes in a row, one per day of January 2024. For a question about 15 January only one box is filled; the partitioned layout reads 8,968 bytes against 822,585 for the single Parquet file. For a whole-month question every box is filled and each carries a small footer; the partitioned layout then reads 3,023,334 bytes for every column against 2,387,037 for the single file, because 31 small files carry 31 footers.">
+        <defs>
+          <filter id="b1cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="31" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b1cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+        </defs>
+        <style>
+          .b1cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .b1cL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b1cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b1cB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b1cR { font: 800 11px Inter, sans-serif; fill: #991B1B; }
+          .b1cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="b1cH" x="30" y="26">ONE FOLDER PER PICKUP DAY: TWO QUESTIONS</text>
+
+        <g filter="url(#b1cSk)" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="64" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="88" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="112" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="136" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="160" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="184" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="208" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="232" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="256" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="280" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="304" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="328" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="352" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/>
+          <rect x="376" y="62" width="20" height="40" rx="3" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="400" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="424" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="448" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="472" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="496" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="520" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="544" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="568" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="592" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="616" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="640" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="664" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="688" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="712" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="736" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/><rect x="760" y="62" width="20" height="40" rx="3" fill="#FFFFFF"/>
+          <rect x="40" y="176" width="740" height="40" rx="4" fill="url(#b1cHc)"/>
+          <path d="M64 176 L64 216 M88 176 L88 216 M112 176 L112 216 M136 176 L136 216 M160 176 L160 216 M184 176 L184 216 M208 176 L208 216 M232 176 L232 216 M256 176 L256 216 M280 176 L280 216 M304 176 L304 216 M328 176 L328 216 M352 176 L352 216 M376 176 L376 216 M400 176 L400 216 M424 176 L424 216 M448 176 L448 216 M472 176 L472 216 M496 176 L496 216 M520 176 L520 216 M544 176 L544 216 M568 176 L568 216 M592 176 L592 216 M616 176 L616 216 M640 176 L640 216 M664 176 L664 216 M688 176 L688 216 M712 176 L712 216 M736 176 L736 216 M760 176 L760 216" stroke="#991B1B"/>
+        </g>
+
+        <text class="b1cL" x="40" y="52">Fares on 15 January: one folder, one column</text>
+        <text class="b1cB" x="350" y="122">15 Jan</text>
+        <text class="b1cS" x="40" y="142">partitioned reads 8,968 B · one Parquet file reads 822,585 B · CSV reads 10,095,345 B</text>
+        <text class="b1cL" x="40" y="166">Every column, whole month: 31 folders, 31 footers</text>
+        <text class="b1cR" x="40" y="238">31 small files: 3,023,334 B against 2,387,037 B for one file</text>
+        <text class="b1cN" x="40" y="280">Partition by the column your questions filter on, and keep files large enough that the footer is noise.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the red seams are footers: on a whole-month question the partitioned layout reads more than the single file</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The small-files trade, in AWS's words<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Athena's tuning guide is direct: "Datasets that consist of many small files result in poor overall query performance", "loading a single bigger file from Amazon S3 is faster than loading the same records from many smaller files", and "For small files, the overhead of the columnar file format outweighs the benefits". On our sample each daily file is 73,785 to 113,419 bytes, 2,310 to 3,897 trips, far smaller than a single Parquet row group, so the overhead is visible: a whole-month question reads 26.7 percent more bytes from the partitioned layout than from one file. At production sizes a day of trips is millions of rows and the footer becomes a rounding error. The rule is not "always partition"; it is "partition on the filter you actually use, at a grain that keeps files big".</p>
+        <p>AWS gives no single target file size in the Athena documentation. The figure people quote, 128 MB, is the default Parquet row group size the guide mentions, not a file-size rule.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Partitioned by the minute.</strong> An ingestion job writes one file per minute per source because that is when events arrive. A year later the table holds hundreds of thousands of tiny files, queries spend more time opening files than reading data, and the bill is dominated by footers and request overhead. The usual repair is a compaction job that rewrites each day into a few large files. The scenario is constructed; the mechanism is the one measured above.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Three layouts in a bucket on your laptop</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Five steps, one Python file, about two minutes of run time. The outputs below are pasted from a real run of exactly this code. Work in a fresh folder: the later analyst sessions reuse the <code>out/</code> folder it creates.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along pipeline drawn left to right. The sample Parquet file of 100,000 trips goes into DuckDB, which writes three outputs: a CSV file, one Parquet file, and a partitioned folder of 31 Parquet files. All three are uploaded with boto3 into a bucket named acme-lake that lives inside moto on the laptop, under raw and curated prefixes. A final step reads the Parquet footer to measure bytes per column.">
+        <defs>
+          <filter id="b1dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="43" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b1dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b1dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b1dL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .b1dS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .b1dB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .b1dW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .b1dN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#b1dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="60" width="150" height="70" rx="8" transform="rotate(-1 105 95)" fill="url(#b1dHc)"/>
+          <rect x="220" y="60" width="120" height="70" rx="8" transform="rotate(0.8 280 95)" fill="#183177" stroke="#183177"/>
+          <rect x="380" y="30" width="170" height="36" rx="6" fill="#FFFFFF"/>
+          <rect x="380" y="78" width="170" height="36" rx="6" fill="#FFFFFF"/>
+          <rect x="380" y="126" width="170" height="36" rx="6" fill="#FFFFFF"/>
+          <rect x="600" y="40" width="250" height="120" rx="12" transform="rotate(0.5 725 100)" fill="#EEF1FA"/>
+          <rect x="620" y="118" width="210" height="28" rx="6" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M184 95 L212 95" marker-end="url(#b1dAr)"/>
+          <path d="M344 88 L372 50 M344 95 L372 96 M344 102 L372 142" marker-end="url(#b1dAr)"/>
+          <path d="M554 96 L592 96" marker-end="url(#b1dAr)"/>
+        </g>
+
+        <text class="b1dL" x="44" y="90">sample.parquet</text>
+        <text class="b1dS" x="44" y="108">100,000 trips</text>
+        <text class="b1dW" x="236" y="92">DuckDB</text>
+        <text class="b1dW" x="236" y="110">writes</text>
+        <text class="b1dL" x="392" y="53">trips.csv</text>
+        <text class="b1dL" x="392" y="101">trips.parquet</text>
+        <text class="b1dL" x="392" y="149">partitioned/ x 31</text>
+        <text class="b1dL" x="616" y="66">moto: bucket acme-lake</text>
+        <text class="b1dS" x="616" y="86">raw/ and curated/ prefixes</text>
+        <text class="b1dS" x="616" y="104">on your laptop, nothing billed</text>
+        <text class="b1dB" x="632" y="137">then measure the footer</text>
+
+        <text class="b1dN" x="30" y="206">Same rows in, three layouts out, one mocked bucket. Every number below is printed by this pipeline.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - moto answers the same API calls S3 would, in memory, so the code is the code you would run against AWS</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Create an environment with the versions this page was verified on, and download the sample.</strong> The sample is 2,776,217 bytes: 100,000 rows drawn with seed 20240101 from the TLC's January 2024 yellow taxi file. Run in a new, empty folder.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · setup (verified 3 October 2026)</span>python3 -m venv .venv &amp;&amp; . .venv/bin/activate
+pip install "moto[s3,iam,glue,awslambda]==5.2.3" boto3==1.43.108 duckdb==1.5.6 pyarrow==25.0.1
+curl -O https://phoebefu6.github.io/learn-aws-with-phoebe/data/yellow_tripdata_2024-01_sample.parquet</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the same rows three ways with DuckDB.</strong> One CSV, one Parquet file, and Parquet partitioned by pickup day. A derived <code>pickup_date</code> column becomes the folder name and is not stored inside the files.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · b1_layout.py, part 1</span>import os, boto3, duckdb
+from moto import mock_aws
+
+SAMPLE = "yellow_tripdata_2024-01_sample.parquet"
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
+con = duckdb.connect()
+con.execute("SET threads=1")
+con.execute(f"CREATE TABLE trips AS SELECT *, CAST(tpep_pickup_datetime AS DATE) AS pickup_date FROM '{SAMPLE}'")
+os.makedirs("out", exist_ok=True)
+con.execute("COPY (SELECT * EXCLUDE (pickup_date) FROM trips) TO 'out/trips.csv' (HEADER)")
+con.execute("COPY (SELECT * EXCLUDE (pickup_date) FROM trips) TO 'out/trips.parquet' (FORMAT parquet, COMPRESSION snappy)")
+con.execute("COPY trips TO 'out/partitioned' (FORMAT parquet, COMPRESSION snappy, PARTITION_BY (pickup_date), OVERWRITE_OR_IGNORE)")</div>
+      </div>
+      <div class="step">
+        <p><strong>Upload into a raw and a curated zone of a mocked bucket.</strong> Inside <code>mock_aws()</code>, boto3 talks to moto instead of AWS. The keys are the layout decision, written down.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · b1_layout.py, part 2</span>with mock_aws():
+    s3 = boto3.client("s3")
+    s3.create_bucket(Bucket="acme-lake")
+    s3.upload_file("out/trips.csv", "acme-lake", "raw/nyc_taxi/2024/01/trips.csv")
+    s3.upload_file("out/trips.parquet", "acme-lake", "curated/nyc_taxi_flat/2024-01.parquet")
+    for root, _, files in os.walk("out/partitioned"):
+        for f in files:
+            part = root.split("partitioned/")[1]                      # pickup_date=2024-01-15
+            s3.upload_file(os.path.join(root, f), "acme-lake", f"curated/nyc_taxi/{part}/{f}")
+    pages = s3.get_paginator("list_objects_v2").paginate(Bucket="acme-lake")
+    objs = [o for p in pages for o in p["Contents"]]
+    for prefix in ("raw/", "curated/nyc_taxi_flat/", "curated/nyc_taxi/"):
+        sel = [o for o in objs if o["Key"].startswith(prefix)]
+        print(f"{prefix:24s} {len(sel):3d} objects {sum(o['Size'] for o in sel):&gt;10,d} bytes")
+    print("one partition key:", sorted(o["Key"] for o in objs if "2024-01-15" in o["Key"])[0])</div>
+      </div>
+      <div class="step">
+        <p><strong>Read the Parquet footer and count what a two-column question needs.</strong> DuckDB's <code>parquet_metadata()</code> lists every column chunk and its compressed size, which is what a columnar engine fetches from S3.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · b1_layout.py, part 3</span>cols = con.execute("""SELECT path_in_schema, SUM(total_compressed_size) FROM parquet_metadata('out/trips.parquet')
+                      GROUP BY 1 ORDER BY 2 DESC""").fetchall()
+need = sum(b for c, b in cols if c in ("payment_type", "tip_amount"))
+print("parquet column chunks:", len(cols), "| two columns needed:", f"{need:,d}", "bytes of", f"{os.path.getsize('out/trips.parquet'):,d}")
+print("csv must be read whole:", f"{os.path.getsize('out/trips.csv'):,d}", "bytes")</div>
+      </div>
+      <div class="step">
+        <p><strong>Run it and compare with this real output.</strong> Your bytes match exactly if your DuckDB version matches; a different version may encode slightly differently.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · python b1_layout.py (real output)</span>raw/                       1 objects 10,095,345 bytes
+curated/nyc_taxi_flat/     1 objects  2,387,037 bytes
+curated/nyc_taxi/         31 objects  3,023,334 bytes
+one partition key: curated/nyc_taxi/pickup_date=2024-01-15/data_0.parquet
+parquet column chunks: 19 | two columns needed: 172,585 bytes of 2,387,037
+csv must be read whole: 10,095,345 bytes</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>On a real Free Tier account (optional).</strong> Needs an AWS account: AWS says most new customers are not asked for a card on the Free plan, some are, and a Paid plan needs one. Remove the <code>with mock_aws():</code> line and dedent, give the bucket a globally unique name, and run with credentials from <code>aws configure</code>. About 15.5 MB is stored for minutes; at $0.023 per GB-month that is a fraction of a cent, plus 33 PUT requests at $0.005 per 1,000. Delete the bucket afterwards with <code>aws s3 rb s3://your-bucket --force</code>.</p>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The layout that sets every future query's price by accident</span>s3://data/export_final_v2.csv
+s3://data/export_final_v2 (1).csv
+s3://data/tmp/ingest_2024-01-15-09-31.json   (one file per minute, forever)</div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 2</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Change the question.</strong> Edit step 4 to count the bytes for <code>fare_amount</code> alone, then for five columns of your choice. Write down the share of the CSV each one is.</li>
+      <li><strong>Partition by something else.</strong> Rewrite the partitioned copy by <code>payment_type</code> instead of day. How many files, how large, and which questions does it help?</li>
+      <li><strong>Find a small-files table at work.</strong> Pick one S3 prefix your team writes to and count objects and average size. Is the average below a megabyte?</li>
+      <li><strong>Keep the <code>out/</code> folder.</strong> Sessions 3 and 4 register and query it.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 1 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">1 · In S3, what is <code>curated/nyc_taxi/</code>?</p>
+      <button class="qopt" type="button">A · A folder object that contains the files</button>
+      <button class="qopt" type="button">B · A separate bucket</button>
+      <button class="qopt" type="button">C · A partition that S3 creates automatically</button>
+      <button class="qopt" type="button">D · A prefix: part of the key string that many objects share, which policies, lifecycle rules and engines can all point at</button>
+      <p class="qwhy">S3 is a flat key space. The console draws folders from the slashes, but access, lifecycle, throughput and pruning all work on prefixes.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Average tip by payment type reads 10,095,345 bytes from the CSV and 197,417 from the Parquet file. Why?</p>
+      <button class="qopt" type="button">A · CSV must be read whole; Parquet stores each column in its own compressed chunks, so the engine reads the footer and only the two chunks it needs</button>
+      <button class="qopt" type="button">B · The Parquet file has fewer rows</button>
+      <button class="qopt" type="button">C · DuckDB caches the Parquet file</button>
+      <button class="qopt" type="button">D · CSV files are always ten times larger by rule</button>
+      <p class="qwhy">Both hold the same 100,000 trips. Column pruning plus compression is why a narrow question costs 1.96 percent of the CSV's bytes.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">3 · On the sample, a whole-month query reads 3,023,334 bytes from the partitioned layout and 2,387,037 from one Parquet file. What does that teach?</p>
+      <button class="qopt" type="button">A · Partitioning is always a mistake</button>
+      <button class="qopt" type="button">B · The partitioned files are corrupt</button>
+      <button class="qopt" type="button">C · Partitions only pay when the query filters on the partition column; many small files each carry a footer, so a question that touches every partition pays for all of them</button>
+      <button class="qopt" type="button">D · Parquet does not compress partitioned data</button>
+      <p class="qwhy">The same mechanism that skips 30 folders for a one-day question adds 30 footers to a whole-month one. Partition on the filter you use, at a grain that keeps files large.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every byte count on this page</span><span class="note">Measured in this build with DuckDB 1.5.6 and moto 5.2.3 on the 100,000-row seeded sample; the code shown is the code that printed them</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Prefix throughput and strong read-after-write consistency</span><span class="note">Amazon S3 User Guide, performance guidelines and consistency model, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Column pruning, bytes billed before decompression, small files, the 128 MB row group</span><span class="note">Amazon Athena User Guide, data optimization techniques and partitioning, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The dataset</span><span class="note">NYC Taxi and Limousine Commission, TLC Trip Record Data, yellow taxi January 2024; the TLC states it makes no representations as to the data's accuracy</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The Free plan card wording</span><span class="note">AWS Free Tier FAQs, read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The per-minute files story</span><span class="note">Constructed; the mechanism is the measured one</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 1 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Keys, not folders</b><span>A prefix is what policies, lifecycle rules and engines point at.</span></div>
+      <div class="cheat-item"><b>Raw and curated</b><span>Raw is the receipt; curated is what people read. Different rules for each.</span></div>
+      <div class="cheat-item"><b>CSV is read whole</b><span>10,095,345 B for any question about the sample.</span></div>
+      <div class="cheat-item"><b>Parquet is read by column</b><span>2,387,037 B in all; 197,417 B for a two-column question.</span></div>
+      <div class="cheat-item"><b>Partitions skip folders</b><span>One day: 8,968 B. But 31 small files read 3,023,334 B for the whole month.</span></div>
+      <div class="cheat-item"><b>Measure, do not guess</b><span>parquet_metadata() shows what a columnar engine will fetch.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>The bucket exists; now decide who may touch which prefix. Session 2 writes an analyst policy as JSON, attaches it to a user in moto with IAM enforcement switched on, and watches real boto3 calls come back allowed or AccessDenied: read curated yes, read raw no, delete the bucket never.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 1 of 8 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b2-iam-policies-as-code.html">Next: IAM policies as code →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

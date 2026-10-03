@@ -1,0 +1,4 @@
+GetObject curated  ALLOWED
+GetObject raw      AccessDenied
+PutObject curated  AccessDenied
+DeleteBucket       AccessDenied

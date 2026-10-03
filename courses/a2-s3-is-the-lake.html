@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 2 of 6. S3 as the lake a data team actually needs: keys and prefixes instead of folders, raw, curated and archive zones, storage classes and their minimum durations, and lifecycle rules that move or delete data on a schedule.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="S3 is the lake - learn aws with phoebe">
+<meta property="og:description" content="Leader session 2 of 6. A terabyte a month costs $23.55 in S3 Standard and $1.01 in Deep Archive. The catch is the minimum duration and a 9 to 48 hour wait to read it back.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-aws-with-phoebe/courses/a2-s3-is-the-lake.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="S3 is the lake - learn aws with phoebe">
+<meta name="twitter:description" content="Leader session 2 of 6. Prefixes, zones, storage classes, minimums and lifecycle rules.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-aws-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 2 · S3 is the lake - learn aws with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-aws-with-phoebe</a> / Leader session 2 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AWS with Phoebe · Leader track · Session 2 of 6</div>
+    <h1>S3 is the <span class="accent">lake</span></h1>
+    <p class="sub">Every AWS data platform starts with the same bucket and the same three questions: how are the keys named, which storage class does each kind of data sit in, and what happens to it after thirty days, a year, seven years. Tonight we draw the lake a data team actually needs, raw, curated and archive, and price each zone with real us-east-1 numbers, including the minimum durations that bill you for leaving early.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Foundations</span>
+      <span class="chip audience">Data and AI leaders, managers, architects</span>
+      <span class="chip audience">No code, no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Prefixes, classes, lifecycle</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: a lifecycle plan on paper</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 1 put S3 at the bottom of the map as "the files themselves". Tonight that row gets real. S3 looks like a file system in the console, with folders you can click into, but underneath it is a flat list of keys, and almost every decision a data leader makes about the lake is really a decision about how those keys are named. Get the naming right and permissions, lifecycle rules and query engines all have something clean to point at. Get it wrong and every later fix is a rename of millions of objects.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A one-page lifecycle plan for your lake, one row per prefix: the storage class each zone is written to, when it moves, when it is deleted, and who is allowed to bring it back and how long they wait. Plus the price line that goes with it: a terabyte for a month costs $23.55 in S3 Standard, $12.80 in Standard-IA and $1.01 in Deep Archive (us-east-1, AWS Price List, 3 October 2026; re-verify before relying on it).</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers buckets, keys, prefixes and zones</span>
+      <h2>No folders, only keys</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A bucket holds objects, and each object has one key: a single string such as <code>curated/nyc_taxi/pickup_date=2024-01-15/data_0.parquet</code>. The slashes are just characters. A prefix is the start of a key, <code>curated/</code> or <code>curated/nyc_taxi/</code>, and it is the unit the rest of AWS points at: a policy grants access to a prefix, a lifecycle rule filters on a prefix, an Athena table's location is a prefix. That is why the first design decision for a lake is the top-level prefixes, the zones.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 366" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One S3 bucket drawn as a flat list of keys grouped by three top-level prefixes. raw/ holds two monthly CSV files, written by an ingest job. curated/ holds three daily Parquet files under keys like curated/nyc_taxi/pickup_date=2024-01-15/data_0.parquet, read by analysts through Athena; it is highlighted. archive/ holds one older file, restored on request by an auditor. Each reader points at a prefix, not at a folder.">
+        <defs>
+          <filter id="a2aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="52" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a2aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a2aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a2aH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a2aL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a2aS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a2aA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a2aN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a2aH" x="30" y="26">ONE BUCKET, ONE FLAT LIST OF KEYS, THREE PREFIXES</text>
+
+        <g filter="url(#a2aSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="496" height="280" rx="12" transform="rotate(-0.3 278 180)" fill="#FFFFFF"/>
+          <rect x="46" y="68" width="464" height="64" rx="8" transform="rotate(0.4 278 100)" fill="#EEF1FA"/>
+          <rect x="46" y="144" width="464" height="82" rx="8" transform="rotate(-0.4 278 185)" fill="#FF9900" stroke="#5C3300"/>
+          <rect x="46" y="238" width="464" height="60" rx="8" transform="rotate(0.3 278 268)" fill="#EEF1FA"/>
+          <rect x="600" y="72" width="250" height="56" rx="8" transform="rotate(1.2 725 100)" fill="#FFFFFF"/>
+          <rect x="600" y="156" width="250" height="56" rx="8" transform="rotate(-1.4 725 184)" fill="#FFFFFF"/>
+          <rect x="600" y="240" width="250" height="56" rx="8" transform="rotate(0.9 725 268)" fill="#FFFFFF"/>
+          <path d="M596 100 L516 100" marker-end="url(#a2aAr)"/>
+          <path d="M596 184 L516 184" marker-end="url(#a2aAr)"/>
+          <path d="M596 268 L516 268" marker-end="url(#a2aAr)"/>
+        </g>
+
+        <text class="a2aA" x="46" y="58">bucket: team-lake (constructed name)</text>
+        <text class="a2aH" x="60" y="88">raw/</text>
+        <text class="a2aS" x="60" y="106">raw/taxi/2024-01/yellow_tripdata_2024-01.csv</text>
+        <text class="a2aS" x="60" y="122">raw/taxi/2024-02/yellow_tripdata_2024-02.csv</text>
+        <text class="a2aH" x="60" y="164">curated/</text>
+        <text class="a2aL" x="60" y="182">curated/nyc_taxi/pickup_date=2024-01-14/data_0.parquet</text>
+        <text class="a2aL" x="60" y="198">curated/nyc_taxi/pickup_date=2024-01-15/data_0.parquet</text>
+        <text class="a2aL" x="60" y="214">curated/nyc_taxi/pickup_date=2024-01-16/data_0.parquet</text>
+        <text class="a2aH" x="60" y="258">archive/</text>
+        <text class="a2aS" x="60" y="278">archive/taxi/2019/yellow_tripdata_2019-12.csv</text>
+
+        <text class="a2aL" x="616" y="96">Ingest job</text>
+        <text class="a2aS" x="616" y="114">writes new files into raw/</text>
+        <text class="a2aL" x="616" y="180">Analysts, through Athena</text>
+        <text class="a2aS" x="616" y="198">read curated/, never write</text>
+        <text class="a2aL" x="616" y="264">Auditor, on request</text>
+        <text class="a2aS" x="616" y="282">restores archive/, then reads</text>
+
+        <text class="a2aN" x="30" y="350">No folders: a key is one string, and a prefix is its start. Policies, lifecycle and engines point at it.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange zone is the one most people query, so it is the prefix most policies and tables will name</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Three zones, three kinds of reader<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>raw/</strong> holds data exactly as it arrived: the CSV export, the JSON dump, never edited. Only the ingest process writes here, and almost nobody reads it. <strong>curated/</strong> holds the cleaned, typed version, usually Parquet laid out by date, and it is what analysts and dashboards query. <strong>archive/</strong> holds what you must keep but rarely touch, such as old raw files kept for an audit or a legal hold. The names vary from team to team; the separation does not. Each zone has a different reader, a different access rule, and, as Part 2 shows, a different right storage class.</p>
+        <p>How the curated files are built from the raw ones is a pipeline question, and pipelines have their own home in <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">learn data engineering</a>. Here the only question is where each kind of file lives and what that costs.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Why the prefix carries the weight<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>S3 performance is also counted per prefix. The Amazon S3 User Guide says an application "can achieve at least 3,500 PUT/COPY/POST/DELETE or 5,500 GET/HEAD requests per second per partitioned Amazon S3 prefix", and "There are no limits to the number of prefixes in a bucket." Spreading heavy reads across more prefixes, such as one per day, spreads the load. While S3 is scaling up to a new request rate, it may answer some requests with 503 Slow Down errors, so a sudden burst should retry rather than fail.</p>
+        <p>One more property removes a whole class of old worries: S3 "provides strong read-after-write consistency for PUT and DELETE requests of objects in your Amazon S3 bucket in all AWS Regions." A job that writes a file and immediately lists the prefix will see it. Bucket configurations, such as policies and lifecycle rules, are the exception: they are eventually consistent, so a just-changed rule may take a moment to apply.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The console's folders are a drawing of the keys<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The S3 console groups keys at each slash and shows the groups as folders, which is helpful for browsing and misleading for design. There is no folder object to rename, move or lock. "Renaming a folder" means copying every object under the old prefix to a new key and deleting the original, which is billed per request (S3 PUT, COPY, POST and LIST requests are $0.005 per 1,000 in us-east-1, AWS Price List, 3 October 2026; re-verify before relying on it). That is the practical reason to fix the zone names before the first terabyte lands.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The shared "data/" prefix nobody could split.</strong> A team starts with everything under one prefix, <code>data/</code>, raw exports and cleaned tables side by side with names like <code>data/orders_2024.csv</code> and <code>data/orders_clean.parquet</code>. A year later the security lead asks for analysts to see curated tables only. There is no prefix that means "curated", so the policy would have to list hundreds of individual keys and be edited every week. The real fix is a migration into <code>raw/</code> and <code>curated/</code>, paid for in copy requests and a weekend. The scenario is constructed; the shape is common.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers storage classes and their minimums</span>
+      <h2>Cheaper per gigabyte, slower and stickier</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Every object in S3 sits in a storage class, and "If you don't specify the storage class when you upload an object, Amazon S3 assigns the S3 Standard storage class." All the classes below are designed for eleven nines of durability, so they do not differ in how likely you are to lose a byte. They differ in availability, in how many Availability Zones hold the copies, in how long you must keep an object before deleting it without a penalty, and in how long it takes to read it back. The price per gigabyte falls as each of those gets worse.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Five horizontal bars showing what 1,024 GB costs for a month in each S3 storage class, us-east-1, AWS Price List of 3 October 2026. S3 Standard 23.55 dollars, no minimum, read in milliseconds. Standard-IA 12.80 dollars, 30-day minimum. Glacier Instant Retrieval 4.10 dollars, 90-day minimum, milliseconds. Glacier Flexible Retrieval 3.69 dollars, 90-day minimum, minutes to 12 hours. Deep Archive 1.01 dollars, 180-day minimum, 9 to 48 hours, highlighted. The cheaper the class, the longer the minimum and the slower the read.">
+        <defs>
+          <filter id="a2bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="63" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a2bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a2bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a2bH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a2bL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a2bS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a2bB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a2bV { font: 800 17px Inter, sans-serif; fill: #0E1F52; }
+          .a2bA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a2bN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a2bH" x="30" y="26">1,024 GB FOR ONE MONTH, US-EAST-1, AWS PRICE LIST OF 3 OCTOBER 2026</text>
+        <text class="a2bA" x="740" y="50">minimum duration</text>
+
+        <g filter="url(#a2bSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M196 60 L196 290" stroke="#C5CCD8"/>
+          <rect x="200" y="66" width="440" height="30" rx="4" transform="rotate(-0.4 420 81)" fill="url(#a2bHc)"/>
+          <rect x="200" y="114" width="239" height="30" rx="4" transform="rotate(0.5 320 129)" fill="url(#a2bHc)"/>
+          <rect x="200" y="162" width="77" height="30" rx="4" transform="rotate(-0.6 238 177)" fill="url(#a2bHc)"/>
+          <rect x="200" y="210" width="69" height="30" rx="4" transform="rotate(0.7 234 225)" fill="url(#a2bHc)"/>
+          <rect x="200" y="258" width="19" height="30" rx="3" transform="rotate(-1 210 273)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a2bL" x="30" y="80">S3 Standard</text>
+        <text class="a2bS" x="30" y="96">read in milliseconds</text>
+        <text class="a2bV" x="652" y="88">$23.55</text>
+        <text class="a2bS" x="740" y="86">none</text>
+
+        <text class="a2bL" x="30" y="128">Standard-IA</text>
+        <text class="a2bS" x="30" y="144">plus $0.01 per GB read</text>
+        <text class="a2bV" x="452" y="136">$12.80</text>
+        <text class="a2bS" x="740" y="134">30 days</text>
+
+        <text class="a2bL" x="30" y="176">Glacier Instant</text>
+        <text class="a2bS" x="30" y="192">read in milliseconds</text>
+        <text class="a2bV" x="290" y="184">$4.10</text>
+        <text class="a2bS" x="740" y="182">90 days</text>
+
+        <text class="a2bL" x="30" y="224">Glacier Flexible</text>
+        <text class="a2bS" x="30" y="240">minutes to 12 hours</text>
+        <text class="a2bV" x="282" y="232">$3.69</text>
+        <text class="a2bS" x="740" y="230">90 days</text>
+
+        <text class="a2bL" x="30" y="272">Deep Archive</text>
+        <text class="a2bS" x="30" y="288">9 to 48 hours</text>
+        <text class="a2bV" x="232" y="280">$1.01</text>
+        <text class="a2bB" x="740" y="278">180 days</text>
+
+        <text class="a2bN" x="30" y="316">Each step down the price list buys a longer minimum and a slower read. Re-verify prices before relying on them.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange sliver is the cheapest storage on AWS, and it is cheap because you wait up to two days to read it</figcaption>
+    </figure>
+
+    <table class="clean">
+      <tr><th>Class</th><th>Availability</th><th>AZs</th><th>Minimum duration</th><th>Minimum billable size</th><th>Per GB-month, us-east-1</th></tr>
+      <tr><td>S3 Standard</td><td>99.99%</td><td>3 or more</td><td>none</td><td>none</td><td>$0.023 first 50 TB</td></tr>
+      <tr><td>S3 Standard-IA</td><td>99.9%</td><td>3 or more</td><td>30 days</td><td>128 KB</td><td>$0.0125, plus $0.01 per GB retrieved</td></tr>
+      <tr><td>S3 Intelligent-Tiering</td><td>99.9%</td><td>3 or more</td><td>none</td><td>none</td><td>$0.023 frequent tier, plus monitoring</td></tr>
+      <tr><td>S3 One Zone-IA</td><td>99.5%</td><td>1</td><td>30 days</td><td>128 KB</td><td>$0.01</td></tr>
+      <tr><td>S3 Express One Zone</td><td>99.95%</td><td>1</td><td>none</td><td>none</td><td>not quoted here</td></tr>
+      <tr><td>Glacier Instant Retrieval</td><td>99.9%</td><td>3 or more</td><td>90 days</td><td>128 KB</td><td>$0.004</td></tr>
+      <tr><td>Glacier Flexible Retrieval</td><td>99.99% after restore</td><td>3 or more</td><td>90 days</td><td>n/a</td><td>$0.0036</td></tr>
+      <tr><td>Glacier Deep Archive</td><td>99.99% after restore</td><td>3 or more</td><td>180 days</td><td>n/a</td><td>$0.00099</td></tr>
+    </table>
+    <p class="mono" style="margin-top:6px">Durability is eleven nines for every class above. Class facts from the Amazon S3 User Guide, "Understanding and managing Amazon S3 storage classes". Prices from the AWS Price List bulk API, us-east-1, retrieved 3 October 2026 (S3 offer published 28 September 2026, Deep Archive offer 11 September 2026). Re-verify before relying on them.</p>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The minimums are the part that bites<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Two rules sit underneath the cheap classes. The first is the minimum billable size: "If an object is less than 128 KB, Amazon S3 charges you for 128 KB." A lake full of tiny files can pay for far more storage than it holds. The second is the minimum duration: "If you delete an object before the end of the 30-day minimum storage duration period, you are charged for 30 days." Standard-IA and One Zone-IA have a 30-day minimum, Glacier Instant Retrieval and Glacier Flexible Retrieval 90 days, Deep Archive 180 days. Delete a Deep Archive object after a week and you pay for six months.</p>
+        <p>So the infrequent-access classes are a bet on behaviour, not a discount. They pay off for data that is written once, kept for months and read rarely. They lose for data that churns, gets rewritten nightly, or is read in full every day, because Standard-IA also charges $0.01 per GB retrieved (us-east-1, AWS Price List, 3 October 2026).</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>One Zone means one copy<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Every class in the table is designed to survive the loss of an Availability Zone except two: One Zone-IA and Express One Zone. AWS's wording for One Zone-IA is that it "is not resilient to the physical loss of the Availability Zone". At $0.01 per GB-month against $0.0125 for Standard-IA, it is the right home for a copy you can rebuild, such as curated Parquet you could regenerate from raw. It is the wrong home for the only copy of anything, and raw data usually is the only copy.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Intelligent-Tiering and the retrieval clock<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Intelligent-Tiering is S3 making the bet for you. "S3 Intelligent-Tiering moves objects that have not been accessed in 30 consecutive days to the Infrequent Access tier", and after 90 days to the Archive Instant Access tier, with "no retrieval fees". The price is a monitoring and automation charge of $0.0025 per 1,000 objects a month (us-east-1, AWS Price List, 3 October 2026; re-verify before relying on it), and one exception that matters to data teams: "If the size of an object is less than 128 KB, it is not monitored and not eligible for auto-tiering." It suits data whose access pattern you genuinely cannot predict. It does nothing for a lake made of small files.</p>
+        <p>The Glacier classes trade speed for price. Glacier Instant Retrieval returns objects in milliseconds. Glacier Flexible Retrieval takes minutes to 12 hours, depending on the retrieval option. Deep Archive takes 9 to 48 hours: its standard restore typically completes "within 12 hours" and its bulk restore "within 48 hours". Glacier Flexible and Deep Archive objects must be restored before they can be read at all. Before anything goes into those two classes, someone should be able to say out loud: "if the regulator asks, we can answer in two days, and that is fine."</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The Friday audit request.</strong> A finance team is asked on a Friday afternoon for raw transaction files from four years ago, due Monday morning. The files are in Deep Archive, which was the right call on cost: $1.01 a terabyte a month against $23.55 in Standard. A standard restore typically completes within 12 hours and a bulk restore within 48, so the request is met, but only because someone started the restore on Friday rather than Monday. The lesson for the plan is a column, not a class: write down who may restore each zone and how long they will wait. The scenario is constructed; the prices and restore times are AWS's.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers lifecycle rules</span>
+      <h2>Rules that move and delete on a schedule</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">A lifecycle configuration is a set of rules on a bucket, usually filtered by prefix, with two kinds of action. Transition actions "define when objects transition to another storage class." Expiration actions "define when objects expire. Amazon S3 deletes expired objects on your behalf." The rules apply "to both existing objects and objects that you add later", so a new rule reaches the whole history of a prefix the day it is saved. The Well-Architected Data Analytics Lens puts the practice plainly: "If data is stored in Amazon S3, use Amazon S3 Lifecycle configurations to expire data automatically" (BP 13.1).</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 358" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The S3 lifecycle waterfall drawn as a staircase going down and to the right: S3 Standard, then Standard-IA with a 30-day minimum, then Glacier Instant Retrieval with 90 days, then Glacier Flexible Retrieval with 90 days, then Deep Archive with 180 days, highlighted. Arrows only point downward. A long curved arrow shows a rule can skip from Standard straight to Deep Archive. A side panel notes Intelligent-Tiering and One Zone-IA are reached from Standard or Standard-IA, and One Zone-IA can then go only to Glacier Flexible or Deep Archive. Deep Archive is marked one way.">
+        <defs>
+          <filter id="a2cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a2cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a2cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a2cH { font: 800 12px Inter, sans-serif; fill: #232F3E; }
+          .a2cL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a2cS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a2cB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a2cA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a2cN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <text class="a2cH" x="30" y="26">THE LIFECYCLE WATERFALL: TRANSITIONS ONLY RUN DOWNHILL</text>
+        <text class="a2cA" x="268" y="46">a rule can skip steps, but only downward</text>
+
+        <g filter="url(#a2cSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="56" width="136" height="46" rx="8" transform="rotate(-1.2 98 79)" fill="url(#a2cHc)"/>
+          <rect x="190" y="104" width="136" height="46" rx="8" transform="rotate(1 258 127)" fill="#FFFFFF"/>
+          <rect x="350" y="152" width="136" height="46" rx="8" transform="rotate(-0.8 418 175)" fill="#FFFFFF"/>
+          <rect x="510" y="200" width="136" height="46" rx="8" transform="rotate(1.1 578 223)" fill="#FFFFFF"/>
+          <rect x="670" y="248" width="136" height="46" rx="8" transform="rotate(-1 738 271)" fill="#FF9900" stroke="#5C3300"/>
+          <path d="M98 104 L98 127 L186 127" marker-end="url(#a2cAr)"/>
+          <path d="M258 152 L258 175 L346 175" marker-end="url(#a2cAr)"/>
+          <path d="M418 200 L418 223 L506 223" marker-end="url(#a2cAr)"/>
+          <path d="M578 248 L578 271 L666 271" marker-end="url(#a2cAr)"/>
+          <path d="M168 79 C 480 30, 760 100, 738 244" stroke="#2B4A9A" stroke-dasharray="6 5" marker-end="url(#a2cAr)"/>
+          <rect x="30" y="196" width="290" height="96" rx="10" transform="rotate(0.6 175 244)" fill="#EEF1FA"/>
+        </g>
+
+        <text class="a2cL" x="44" y="76">S3 Standard</text>
+        <text class="a2cS" x="44" y="93">no minimum</text>
+        <text class="a2cL" x="204" y="124">Standard-IA</text>
+        <text class="a2cS" x="204" y="141">30-day minimum</text>
+        <text class="a2cL" x="364" y="172">Glacier Instant</text>
+        <text class="a2cS" x="364" y="189">90-day minimum</text>
+        <text class="a2cL" x="524" y="220">Glacier Flexible</text>
+        <text class="a2cS" x="524" y="237">90-day minimum</text>
+        <text class="a2cL" x="684" y="268">Deep Archive</text>
+        <text class="a2cB" x="684" y="285">180-day minimum</text>
+        <text class="a2cB" x="806" y="316" text-anchor="end">one way: nothing transitions back out</text>
+
+        <text class="a2cL" x="44" y="218">Two side doors</text>
+        <text class="a2cS" x="44" y="238">Intelligent-Tiering: from Standard or IA</text>
+        <text class="a2cS" x="44" y="256">One Zone-IA: from Standard or IA,</text>
+        <text class="a2cS" x="44" y="274">then only to Glacier Flexible or Deep</text>
+
+        <text class="a2cN" x="30" y="344">Each arrow is a transition. Leave a class before its minimum and you pay for the rest of the minimum.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the orange step is the bottom of the stair: once a lifecycle rule puts data there, no rule brings it back up</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Five rules of the waterfall<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Downhill only.</strong> "Amazon S3 supports a waterfall model for transitioning between storage classes": Standard can move to any lower class, Standard-IA to Intelligent-Tiering, One Zone-IA, either Glacier class or Deep Archive, Glacier Instant Retrieval to Glacier Flexible or Deep Archive, Glacier Flexible to Deep Archive. <strong>Deep Archive is the floor.</strong> "The transition of objects to the S3 Glacier Deep Archive storage class can go only one way." No lifecycle rule brings it back up.</p>
+        <p><strong>Small objects stay put.</strong> "Starting September 2024, the default behavior prevents objects smaller than 128 KB from being transitioned to any storage class." A rule on a prefix of small files can run for a year and move nothing. <strong>Early exits are billed.</strong> "If you transition objects out of these storage classes before the minimum duration, you are charged for the remainder of that duration." AWS's own worked example uses Glacier Instant Retrieval's 90-day minimum to show that a later move to Deep Archive "must occur after at least 94 days." <strong>Policies cannot stop it.</strong> "You can't use a bucket policy to prevent deletions or transitions by an S3 Lifecycle rule." Whoever can edit the lifecycle configuration can delete a zone on a schedule, which is why session 3 treats that permission as a sensitive one.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The 30-day example is an example, not a law<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Many guides say objects "must" sit in Standard for 30 days before a lifecycle rule can move them to Standard-IA. The pages read for these sessions, the S3 User Guide's lifecycle overview, its transition considerations and its configuration examples, do not state that as a rule. What they do state is the 30-day minimum storage charge for Standard-IA, and an example rule: "Transition objects to the S3 Standard-IA storage class 30 days after creation." Treat 30 days as a sensible starting point that matches the minimum charge, not as a constraint AWS imposes, and check the current documentation if a design depends on moving data sooner.</p>
+        <p>The same Lens that recommends lifecycle rules also notes that "Using Parquet over CSV format can reduce storage costs significantly" (BP 13.1.6). The Lens was last updated on 22 December 2023, so read it as principles rather than a current feature list. File formats in depth belong to <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/">learn AI infra</a>; here the point is only that a smaller file is a smaller bill in every class.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The curated zone that a lifecycle rule would never move.</strong> Analyst session 1 lays out 100,000 real New York taxi trips from January 2024 as Parquet partitioned by pickup day: 31 files of 73,785 to 113,419 bytes each. Every one of them is under 128 KB. Point a default lifecycle rule at that prefix and nothing transitions; point Intelligent-Tiering at it and nothing is monitored. At full scale the daily files would be larger, so this is a property of the sample, not of partitioning, but it is exactly what happens to a lake that partitions too finely. The file sizes are measured; the rule outcome follows from AWS's September 2024 default.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>A lifecycle plan on paper</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No console and no account. One sheet, five columns, one row per top-level prefix. By the end you have a plan an engineer can turn into a lifecycle configuration in an afternoon, and a price for each row. The worked example below is constructed: your volumes, prefixes and retention periods will differ, and so will your numbers.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 270" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A hand-drawn worksheet with five columns: prefix, class at write, transitions, expiration, and who restores and how fast. Three rows: raw, curated and archive. The raw row is filled as a worked example: written to Standard, Standard-IA at 30 days and Deep Archive at 180 days, expire after 7 years, platform lead restores in 9 to 48 hours. The curated and archive rows are blank. An orange tab asks who can restore each row and how long they wait.">
+        <defs>
+          <filter id="a2dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="84" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a2dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#183177" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a2dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a2dL { font: 600 12px Inter, sans-serif; fill: #232F3E; }
+          .a2dS { font: 400 11px Inter, sans-serif; fill: #4E5A6B; }
+          .a2dB { font: 800 11px Inter, sans-serif; fill: #5C3300; }
+          .a2dA { font: 700 11px Inter, sans-serif; fill: #183177; }
+          .a2dN { font: 400 12px Inter, sans-serif; fill: #4E5A6B; }
+        </style>
+
+        <g filter="url(#a2dSk)" fill="none" stroke="#232F3E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="24" width="820" height="170" rx="8" transform="rotate(-0.3 440 109)" fill="#FFFFFF"/>
+          <path d="M30 58 L850 58"/>
+          <path d="M140 24 L140 194 M290 24 L290 194 M520 24 L520 194 M650 24 L650 194" stroke="#C5CCD8"/>
+          <path d="M40 104 L840 104 M40 150 L840 150" stroke="#E3E7EE"/>
+          <rect x="36" y="64" width="808" height="36" rx="4" fill="#EEF1FA" stroke="#EEF1FA"/>
+          <rect x="30" y="210" width="330" height="30" rx="6" transform="rotate(0.6 195 225)" fill="#FF9900" stroke="#5C3300"/>
+        </g>
+
+        <text class="a2dA" x="44" y="46">PREFIX</text>
+        <text class="a2dA" x="152" y="46">CLASS AT WRITE</text>
+        <text class="a2dA" x="302" y="46">TRANSITIONS</text>
+        <text class="a2dA" x="532" y="46">EXPIRATION</text>
+        <text class="a2dA" x="662" y="46">WHO RESTORES, HOW FAST</text>
+
+        <text class="a2dL" x="44" y="87">raw/</text>
+        <text class="a2dS" x="152" y="87">S3 Standard</text>
+        <text class="a2dS" x="302" y="87">IA at 30 d, Deep at 180 d</text>
+        <text class="a2dS" x="532" y="87">after 7 years</text>
+        <text class="a2dS" x="662" y="87">platform lead, 9 to 48 h</text>
+        <text class="a2dL" x="44" y="132">curated/</text>
+        <text class="a2dS" x="152" y="132">?</text>
+        <text class="a2dL" x="44" y="178">archive/</text>
+        <text class="a2dS" x="152" y="178">?</text>
+
+        <text class="a2dB" x="44" y="230">Who restores each row, and how fast?</text>
+        <text class="a2dN" x="380" y="230">One row per prefix. The worked row is constructed.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the raw row is a worked example; the orange question is the column most plans leave blank</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>List your top-level prefixes and who touches each.</strong> If your lake has no zones yet, start from raw, curated and archive. For each, write the writer, the readers, and whether the data could be rebuilt from somewhere else. That last answer decides more than any price.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example, zones (constructed)</span>raw/       written by: ingest job      read by: almost nobody     rebuildable: NO, only copy
+curated/   written by: transform job   read by: analysts, BI      rebuildable: yes, from raw/
+archive/   written by: platform team   read by: auditors, rarely  rebuildable: NO, legal hold</div>
+      </div>
+      <div class="step">
+        <p><strong>Pick the class each prefix is written to.</strong> Default is S3 Standard. Anything read daily stays in Standard, because the infrequent-access classes charge to read it. Only a rebuildable copy may sit in a One Zone class.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example, class at write (constructed)</span>raw/       S3 Standard                  (fresh files get re-read for a few weeks)
+curated/   S3 Standard                  (queried every day; IA would charge per GB read)
+archive/   Glacier Instant Retrieval    (if an auditor needs it in milliseconds)
+           or Deep Archive              (if the answer can wait 9 to 48 hours)</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the transitions, then check them against the minimums.</strong> Each step must leave the data in its class at least as long as that class's minimum, or you pay the rest anyway. Then check file sizes: anything under 128 KB will not transition by default.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example, raw/ transitions (constructed)</span>day 0     S3 Standard
+day 30    -&gt; Standard-IA       (30-day minimum: stays until day 180, so 150 days, fine)
+day 180   -&gt; Deep Archive      (180-day minimum: stays until year 7, fine)
+          one way: nothing moves back up without a restore
+check:    raw files are monthly CSVs, far above 128 KB, so they will transition</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the expiration and the restorer.</strong> An expiration is a scheduled delete that no bucket policy can block, so it needs a named retention reason. The restorer is a person or role, plus the wait they have agreed to.</p>
+        <div class="prompt-box good"><span class="label">★ Worked example, expiration and restore (constructed)</span>raw/       expire after 7 years (retention policy ref. needed)   restore: platform lead, 9 to 48 h
+curated/   no expiration; rebuilt from raw/ if lost            restore: not needed
+archive/   expire when the legal hold lifts, set by legal       restore: platform lead on legal's request</div>
+      </div>
+      <div class="step">
+        <p><strong>Price each row for one terabyte.</strong> Use the per-terabyte numbers from Part 2 and say where they came from. This is the line that goes into the budget conversation.</p>
+        <div class="prompt-box good"><span class="label">★ The price line, per 1,024 GB for one month</span>S3 Standard:               $23.55
+Standard-IA:               $12.80   (plus $0.01 per GB read back)
+Glacier Instant Retrieval: $4.10
+Glacier Flexible:          $3.69
+Deep Archive:              $1.01    (180-day minimum, 9 to 48 h to read)
+(us-east-1, AWS Price List, 3 October 2026; re-verify before relying on it)</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The plan that saves money and loses data</span>everything older than 30 days -&gt; One Zone-IA
+expire everything after 1 year
+whoever needs old data can just restore it</div>
+
+    <div class="callout tip">
+      <p><strong>Plan by reader, not by age.</strong> A lifecycle rule only knows how old an object is. You know who reads it. Write the reader column first, and the transitions almost write themselves: data nobody reads moves down, data everybody reads stays in Standard, and the only copy never goes to one zone.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 3</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>List the top-level prefixes of one real bucket</strong> your team uses, or would use. If there is one catch-all prefix such as <code>data/</code>, write down what it would take to split it.</li>
+      <li><strong>Find the only copies.</strong> For each zone, answer: if this prefix vanished tomorrow, could we rebuild it? Any "no" must not live in a One Zone class.</li>
+      <li><strong>Find the existing lifecycle rules.</strong> Ask your platform team whether any bucket has one, what it does, and who can edit it. A rule nobody remembers is a scheduled delete nobody owns.</li>
+      <li><strong>Bring the restore column.</strong> For your archive, write who may restore and how long they can wait. Session 3 turns "who may" into IAM policies.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 2 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · An engineer says "just rename the curated folder to gold". What is actually involved in S3?</p>
+      <button class="qopt" type="button">A · One click; folders are objects S3 can rename in place</button>
+      <button class="qopt" type="button">B · Copying every object to a new key under the new prefix and deleting the originals, because S3 has keys, not folders</button>
+      <button class="qopt" type="button">C · Nothing; S3 resolves the old name automatically</button>
+      <button class="qopt" type="button">D · Changing the bucket name, which renames everything inside it</button>
+      <p class="qwhy">A key is one string and a prefix is just its start. The console draws folders, but a rename is a copy plus a delete for every object, billed per request, and every policy, rule and table that named the old prefix must change too.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · You have raw files that exist nowhere else, and a curated Parquet copy you can regenerate from them. Which pairing is sound?</p>
+      <button class="qopt" type="button">A · Both in One Zone-IA, because it is the cheapest infrequent-access class</button>
+      <button class="qopt" type="button">B · Raw in One Zone-IA, curated in S3 Standard</button>
+      <button class="qopt" type="button">C · Both in Express One Zone for speed</button>
+      <button class="qopt" type="button">D · Raw in a class that survives the loss of an Availability Zone; curated may go to One Zone-IA if it is read rarely, because it can be rebuilt</button>
+      <p class="qwhy">One Zone-IA "is not resilient to the physical loss of the Availability Zone". That trade suits a copy you can regenerate and never suits the only copy. Curated data read every day belongs in Standard anyway, because the IA classes charge per GB read.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">3 · A team writes 1 TB to Standard-IA, realises it was the wrong data, and deletes it after 10 days. What do they pay for storage?</p>
+      <button class="qopt" type="button">A · 10 days, because S3 bills only for time stored</button>
+      <button class="qopt" type="button">B · Nothing, because deletes within a month are free</button>
+      <button class="qopt" type="button">C · 30 days, because Standard-IA has a 30-day minimum storage duration and early deletes are charged for the full period</button>
+      <button class="qopt" type="button">D · 90 days, the Glacier minimum</button>
+      <p class="qwhy">AWS: "If you delete an object before the end of the 30-day minimum storage duration period, you are charged for 30 days." The minimums are why the cheap classes suit data that settles, not data that churns.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Keys, prefixes, 3,500 / 5,500 requests per second per prefix, strong read-after-write consistency</span><span class="note">Amazon S3 User Guide, "Best practices design patterns: optimizing Amazon S3 performance" and the data consistency model, read at source on 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Storage classes: availability, AZs, minimum duration, 128 KB minimum, One Zone caveat, Intelligent-Tiering, retrieval times</span><span class="note">Amazon S3 User Guide, "Understanding and managing Amazon S3 storage classes", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Lifecycle: transition and expiration, the waterfall, Deep Archive one way, the September 2024 small-object default, early-transition charges, bucket policies cannot block rules</span><span class="note">Amazon S3 User Guide, "Managing the lifecycle of objects", read at source. A 30-day hard rule before Standard-IA could not be verified and is not taught as one</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Prices per GB-month, requests, retrieval and Intelligent-Tiering monitoring; $23.55, $12.80, $4.10, $3.69 and $1.01 per 1,024 GB</span><span class="note">AWS Price List bulk API, us-east-1, retrieved 3 October 2026; per-terabyte figures computed from those rows. Re-verify before delivery</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Expire data automatically with lifecycle; Parquet over CSV reduces storage cost</span><span class="note">AWS Well-Architected Data Analytics Lens (December 22, 2023), BP 13.1 and BP 13.1.6, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">31 daily Parquet files of 73,785 to 113,419 bytes</span><span class="note">Measured on the 100,000-row sample of NYC TLC yellow taxi trips, January 2024, laid out in analyst session 1</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The shared "data/" prefix, the Friday audit request, the worked lifecycle plan</span><span class="note">Constructed composites of common patterns, not specific incidents</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 2 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>No folders</b><span>A key is one string; a prefix is its start. Policies, lifecycle and tables all point at prefixes.</span></div>
+      <div class="cheat-item"><b>Three zones</b><span>raw/ as it arrived, curated/ as people query it, archive/ for what you must keep.</span></div>
+      <div class="cheat-item"><b>1 TB for a month</b><span>Standard $23.55 · Standard-IA $12.80 · Deep Archive $1.01 (us-east-1, Price List, 3 Oct 2026).</span></div>
+      <div class="cheat-item"><b>Minimums bite</b><span>IA 30 days, Glacier 90, Deep Archive 180. Leave early, pay the rest. Under 128 KB bills as 128 KB.</span></div>
+      <div class="cheat-item"><b>One Zone is one copy</b><span>Fine for what you can rebuild. Never for the only copy.</span></div>
+      <div class="cheat-item"><b>Lifecycle runs downhill</b><span>Deep Archive is one way, small objects stay put, and no bucket policy can stop a rule.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Your lifecycle plan has a column called "who restores". Session 3 makes it precise. In AWS every request is denied unless a policy allows it, an explicit deny beats any allow, and one wildcard can turn 7 permitted actions into 22. We draw the access matrix for three roles on your lake: who can read curated/, who can write raw/, and who can edit the rule that deletes it.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 2 of 6 · learn-aws-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="a1-what-aws-is-to-a-data-team.html">← Prev: What AWS is to a data team</a> &nbsp;·&nbsp; <a href="a3-who-can-touch-what.html">Next: Who can touch what →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>
